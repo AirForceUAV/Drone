@@ -1,8 +1,15 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from dronekit import connect, VehicleMode, LocationGlobalRelative, LocationGlobal, Command
 import time
 import math
 import json
 from pymavlink import mavutil
+
+__college__='PKU'
+__author__ ='mengxz'
+__date__   ='2016/5/13'
 
 		
 class Drone(object):
@@ -48,12 +55,14 @@ class Drone(object):
 		while self.vehicle.location.global_frame.lat==0:
 			time.sleep(.1)
 		self.home_location = LocationGlobalRelative(self.vehicle.location.global_frame.lat,self.vehicle.location.global_frame.lon)
+		self._log('Home is:')
+		print self.get_home()
 		#Set GUIDED Mode
 		self._log("Set Vehicle.mode = GUIDED (currently: {0})".format(self.vehicle.mode.name) ) 
 		self.vehicle.mode = VehicleMode("GUIDED")
-		while not self.vehicle.mode.name=='GUIDED':  #Wait until mode has changed
-			print " Waiting for mode change ..."
-			time.sleep(1)
+		self._log("Waiting for mode change ...")
+		while not self.vehicle.mode.name=='GUIDED':  #Wait until mode has changed			
+			time.sleep(.1)
 		self._log('current mode :{0}'.format(self.vehicle.mode.name))
 		#Check is_armable
 		self._log("Waiting for ability to arm...")
@@ -62,20 +71,20 @@ class Drone(object):
 
 		#Armed
 		self.vehicle.armed = True
-		while not self.vehicle.armed:      
-			self._log(" Waiting for arming...")
-			time.sleep(1)
+		self._log("Waiting for arming...")
+		while not self.vehicle.armed:      			
+			time.sleep(.1)
 	
 	def disarm(self):
 		self._log("DisArming")
 		self.vehicle.armed=False
 		
-	def takeoff(self,alt=5):
+	def take_off(self,alt=5):
 		self._log("Taking off to {0}".format(alt))
 		self.vehicle.simple_takeoff(alt)
 		# Wait until the vehicle reaches a safe height before processing the goto (otherwise the command after Vehicle.simple_takeoff will execute immediately).
 		while True:
-			self._log(" Altitude: {0}".format(self.vehicle.location.global_relative_frame.alt))      
+			self._log("Altitude: {0}".format(self.vehicle.location.global_relative_frame.alt))      
 			if self.vehicle.location.global_relative_frame.alt>=alt*0.95: #Trigger just below target alt.
 				self._log("Reached target altitude")
 				break
@@ -90,7 +99,6 @@ class Drone(object):
 	def get_home(self):
 		return self.home_location
 		
-
 	def get_location(self):
 		return self.vehicle.location.global_relative_frame
 
@@ -117,6 +125,8 @@ class Drone(object):
 			prefix += "Copter-"
 		elif(self.vehicle._vehicle_type == mavutil.mavlink.MAV_TYPE_FIXED_WING):
 			prefix += "Plane-"
+		elif(self.vehicle._vehicle_type == mavutil.mavlink.MAV_TYPE_HEXAROTOR):
+			prefix += "Hexa-"
 		elif(self.vehicle._vehicle_type == mavutil.mavlink.MAV_TYPE_GROUND_ROVER):
 			prefix += "Rover-"
 		else:
@@ -164,7 +174,7 @@ class Drone(object):
 			'Airspeed':vehicle.airspeed,
 			'System_status':vehicle.system_status.state,
 			'Mode':vehicle.mode.name
-			  }]
+			}]
 		encodedjson=json.dumps(obj)
 		return encodedjson
 
@@ -198,18 +208,26 @@ class Drone(object):
 				break;
 			time.sleep(2)
 	def condition_yaw(self,heading, relative=True):
+		'''After taking off, yaw commands are ignored until the first “movement” command has been received. 
+		If you need to yaw immediately following takeoff then send a command to “move” to your current position'''
 		if relative:
 			is_relative = 1 #yaw relative to direction of travel
 		else:
 			is_relative = 0 #yaw is an absolute angle
+		if heading>=0:
+			is_cw=1
+		else:
+			is_cw=-1
+
 		# create the CONDITION_YAW command using command_long_encode()
+
 		msg =self. vehicle.message_factory.command_long_encode(
 		0, 0,    # target system, target component
 		mavutil.mavlink.MAV_CMD_CONDITION_YAW, #command
 		0, #confirmation
 		heading,    # param 1, yaw in degrees
 		0,          # param 2, yaw speed deg/s
-		1,          # param 3, direction -1 ccw, 1 cw
+		is_cw,          # param 3, direction -1 ccw, 1 cw
 		is_relative, # param 4, relative offset 1, absolute angle 0
 		0, 0, 0)    # param 5 ~ 7 not used
 		# send command to vehicle
@@ -317,6 +335,12 @@ class Drone(object):
 		self.stop()
 	def stop(self):
 		self.send_body_offset_ned_velocity(0,0,0,1)
+	def fly_away(self,distance,heading=0,velocity=1.0):
+		self.condition_yaw(heading)
+		self.forward_v(distance,velocity)
+		self._log('Reached')
+
+
 	def turn_and_move(self,distance,heading=0):
 		currentlocation=self.get_location()		
 		targetlocation =self.get_location_distance_heading(currentlocation,distance,heading)
@@ -379,6 +403,41 @@ class Drone(object):
 	def RTL(self):
 		self._log("Return To Home")
 		self.vehicle.mode=VehicleMode("RTL")
+	def Land(self):
+		self._log("Land")
+		self.vehicle.mode=VehicleMode("LAND")
+	def Stabilize(self):
+		self._log("STABILIZE")
+		self.vehicle.mode=VehicleMode("STABILIZE")
+	def Loiter(self):
+		self._log("Loiter")
+		self.vehicle.mode=VehicleMode("LOITER")
+	def Althold(self):
+		self._log('Althold')
+		self.vehicle.mode=VehicleMode("ALT_HOLD")
+	def pick_up(self):
+		self._log('pick up frame')
+		self.set_channel_value(8,950)
+	def pick_down(self):
+		self._log('pick down frame')
+		self.set_channel_value(8,1950)
+	def get_channels(self):
+		return self.vehicle.channels
+	def get_channel_value(self,key):
+		if not (int(key) > 0 and int(key) <8):
+			raise Exception('Invalid channel index %s' % key)
+		return self.vehicle.channels[key]
+	def set_channel_value(self,key,value):
+		if not (int(key) > 0 and int(key) <8):
+			raise Exception('Invalid channel index %s' % key)
+		self.vehicle.channels.overrides[key]=value
+	def recover_default_channel(self,key):
+		if not (int(key) > 0 and int(key) <8):
+			raise Exception('Invalid channel index %s' % key)
+		self.vehicle.channels.overrides[key]=None
+	def recover_default_channels(self):
+		self.vehicle.channels.overrides={}
+
 	def show(self):
 		distance=self.get_distance_metres(self.get_home(),self.get_location())
 		#print "distance to home:{0},heading:{1},location:{2}".format(distance,self.get_heading(),self.get_location())
@@ -391,7 +450,7 @@ class Drone(object):
 			self._log('close SITL')
 			self.sitl.stop()
 	def _log(self, message):
-		print message
+		print "[DEBUG]:"+message
 
 
 if __name__=="__main__":
@@ -405,47 +464,50 @@ if __name__=="__main__":
 	#print drone.copter_info()
 	#print drone.pix_info()
 	
-	
-	drone.takeoff(5)
-	print "init_position:{0}".format(drone.show())
+	drone.set_airspeed(5)
+	drone.take_off(5)
+	print "init_position:"
+	drone.show()
 	drone.condition_yaw(0,False)
+	drone.fly_away(10)
+	drone.show()
 	
-	print "forward 10m"
-	#drone.condition_yaw(30)
+	'''print "forward 10m"
+	
 	drone.forward_v(10.0,2)
-	#time.sleep(8)
 	drone.show()
 
 	print "backword 10m"
 	drone.condition_yaw(90)
 	drone.backward_v(10.0,2)
-	#time.sleep(8)
 	drone.show()
 
 	print 'left 10m'
 	drone.condition_yaw(30)
 	drone.left_v(10.0,2)
-	#time.sleep(8)
 	drone.show()
 
 	print 'right 10m'
 	drone.condition_yaw(30)
 	drone.right_v(10.0,2)
-	#time.sleep(8)
 	drone.show()
 
 	print 'up 10m'
 	drone.up_v(10.0,2)
-	#time.sleep(8)
 	drone.show()
 
 	print 'down 10m'
 	drone.down_v(10.0,2)
-	#time.sleep(8)
+	drone.show()'''
+	for x in range(0,15):
+		drone.fly_away(10,30)
+		drone.show()
+	drone.condition_yaw(0,False)
+	drone
 	drone.show()
-
 	drone.RTL()
-	
+	time.sleep(40)
+	drone.show()
 	drone.close()
 
 	print("Completed")
