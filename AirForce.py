@@ -9,7 +9,7 @@ from pymavlink import mavutil
 
 __college__='PKU'
 __author__ ='mengxz'
-__date__   ='2016/5/13'
+__BeginningDate__   ='2016/4/13'
 
 		
 class Drone(object):
@@ -18,7 +18,7 @@ class Drone(object):
 		self.vehicle = self.connection(args)
 		#self.commands = self.vehicle.commands
 		self.home_location = None
-
+		self.sitl=None
 		
 	def connection(self,args):
 		if args is None:
@@ -43,6 +43,25 @@ class Drone(object):
 		return self.vehicle
 	def get_alt(self):
 		return self.vehicle.location.global_relative_frame.alt
+	def get_bearing(self,aLocation1, aLocation2):
+		"""
+		Returns the bearing between the two LocationGlobal objects passed as parameters.
+
+		This method is an approximation, and may not be accurate over large distances and close to the 
+		earth's poles.
+		"""	
+		off_x = aLocation2.lon - aLocation1.lon
+		off_y = aLocation2.lat - aLocation1.lat
+		bearing = 90.00 + math.atan2(-off_y, off_x) * 57.2957795
+		if bearing < 0:
+			bearing += 360.00
+		return bearing
+
+	def get_angle(self,lat,lon):
+		aLoction1=self.get_location()
+		aLocation2=LocationGlobal(lat,lon)
+		return self.get_bearing(aLoction1,aLocation2)
+
 	def set_airspeed(self,airspeed):
 		self.vehicle.airspeed=airspeed
 
@@ -54,9 +73,8 @@ class Drone(object):
 		self._log("Waiting for location...")
 		while self.vehicle.location.global_frame.lat==0:
 			time.sleep(.1)
-		self.home_location = LocationGlobalRelative(self.vehicle.location.global_frame.lat,self.vehicle.location.global_frame.lon)
-		self._log('Home is:')
-		print self.get_home()
+		self.home_location = self.get_location()
+		self._log('Home is:{0}'.format(self.get_home()))
 		#Set GUIDED Mode
 		self._log("Set Vehicle.mode = GUIDED (currently: {0})".format(self.vehicle.mode.name) ) 
 		self.vehicle.mode = VehicleMode("GUIDED")
@@ -80,7 +98,7 @@ class Drone(object):
 		self.vehicle.armed=False
 		
 	def take_off(self,alt=5):
-		self._log("Taking off to {0}".format(alt))
+		self._log("Taking off to {0}m".format(alt))
 		self.vehicle.simple_takeoff(alt)
 		# Wait until the vehicle reaches a safe height before processing the goto (otherwise the command after Vehicle.simple_takeoff will execute immediately).
 		while True:
@@ -142,7 +160,7 @@ class Drone(object):
 
 		return prefix + "%s.%s.%s" % (self.vehicle.version.major, self.vehicle.version.minor, self.vehicle.version.patch) + release_type
 
-	def pix_info(self):
+	def FlightController_info(self):
 		vehicle=self.vehicle
 		
 		c=vehicle.capabilities
@@ -157,7 +175,7 @@ class Drone(object):
 		encodedjson=json.dumps(obj)
 		return encodedjson
 
-	def copter_info(self):
+	def UAV_info(self):
 		vehicle=self.vehicle
 		obj=[{'LocationGlobal':(vehicle.location.global_relative_frame.lat,vehicle.location.global_relative_frame.lon,vehicle.location.global_relative_frame.alt),
 			'Local_location':(vehicle.location.local_frame.north,vehicle.location.local_frame.east,vehicle.location.local_frame.down),
@@ -177,7 +195,6 @@ class Drone(object):
 			}]
 		encodedjson=json.dumps(obj)
 		return encodedjson
-
 
 	def goto_NED(self,dNorth,dEast):
 		currentLocation=self.vehicle.location.global_relative_frame
@@ -282,18 +299,7 @@ class Drone(object):
 		0,0,0,   #afx,afy,afz
 		0,0)    #yaw yaw_rate
 		self.vehicle.send_mavlink(msg)
-	def send_body_offset_ned_velocity(self,forward=0,right=0,down=0,duration=1):
 
-		msg=self.vehicle.message_factory.set_position_target_local_ned_encode(
-		0,0,0,mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED,
-		0b0000111111000111,
-		0,0,0,
-		forward,right,down,    #vx,vy,vz
-		0,0,0,   #afx,afy,afz
-		0,0)    #yaw yaw_rate
-		for x in range(0,int(duration)):
-			self.vehicle.send_mavlink(msg)
-			time.sleep(1)
 	#control movement by position
 	def forward_p(self,distance=0.5):
 		self.send_body_offset_ned_position(distance,0,0)
@@ -309,44 +315,55 @@ class Drone(object):
 		self.send_body_offset_ned_position(0,0,distance)
 
 	#control movemnet by velocity
-	def forward_v(self,distance=0.5,velocity=2.0):
+	def forward_v(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
+		if duration==0:
+			duration=1
 		self.send_body_offset_ned_velocity(velocity,0,0,duration)
 		self.stop()
 	def backward_v(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
+		if duration==0:
+			duration=1
 		self.send_body_offset_ned_velocity(-velocity,0,0,duration)
 		self.stop()
 	def left_v(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
+		if duration==0:
+			duration=1
 		self.send_body_offset_ned_velocity(0,-velocity,0,duration)
 		self.stop()
 	def right_v(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
+		if duration==0:
+			duration=1
 		self.send_body_offset_ned_velocity(0,velocity,0,duration)
 		self.stop()
 	def up_v(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
+		if duration==0:
+			duration=1
 		self.send_body_offset_ned_velocity(0,0,-velocity,duration)
 		self.stop()
 	def down_v(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
+		if duration==0:
+			duration=1
 		self.send_body_offset_ned_velocity(0,0,velocity,duration)
 		self.stop()
 	def stop(self):
 		self.send_body_offset_ned_velocity(0,0,0,1)
-	def fly_away(self,distance,heading=0,velocity=1.0):
+	def fly_velocity(self,distance,heading=0,velocity=1.0):
 		self.condition_yaw(heading)
 		self.forward_v(distance,velocity)
 		self._log('Reached')
 
-
-	def turn_and_move(self,distance,heading=0):
+	def fly_position(self,distance,heading=0):
 		currentlocation=self.get_location()		
 		targetlocation =self.get_location_distance_heading(currentlocation,distance,heading)
 		self.condition_yaw(heading)
 		
-		self.forward(distance)		
+		self.forward_p(distance)		
 		self.report_remainingDistance(currentlocation,targetlocation)
 	
 	def get_heading(self):
@@ -379,7 +396,6 @@ class Drone(object):
 			raise Exception("Invalid Location object passed")
 			
 		return targetlocation
-
 	
 	def get_distance_metres(self,aLocation1, aLocation2):  
 		#print 'a1:{0},a2:{1}'.format(aLocation1,aLocation2)     
@@ -415,33 +431,43 @@ class Drone(object):
 	def Althold(self):
 		self._log('Althold')
 		self.vehicle.mode=VehicleMode("ALT_HOLD")
-	def pick_up(self):
-		self._log('pick up frame')
-		self.set_channel_value(8,950)
-	def pick_down(self):
-		self._log('pick down frame')
-		self.set_channel_value(8,1950)
+
+	def deploy(self):    
+		self._log('Deploy Landing Gear')
+		self.vehicle.channels.overrides['8']=1100
+	def retract(self):    
+		self._log('Retract Landing Gear')
+		self.vehicle.channels.overrides['8']=1900
+	def get_mode(self):
+		return self.vehicle.mode.name
+
 	def get_channels(self):
 		return self.vehicle.channels
-	def get_channel_value(self,key):
-		if not (int(key) > 0 and int(key) <8):
+	def get_channel(self,key):
+		if not (int(key) > 0 and int(key) <=8):
 			raise Exception('Invalid channel index %s' % key)
 		return self.vehicle.channels[key]
-	def set_channel_value(self,key,value):
-		if not (int(key) > 0 and int(key) <8):
+	def set_channel(self,key,value):
+		if not (int(key) > 0 and int(key) <=8):
 			raise Exception('Invalid channel index %s' % key)
 		self.vehicle.channels.overrides[key]=value
-	def recover_default_channel(self,key):
-		if not (int(key) > 0 and int(key) <8):
+	def default_channel(self,key):
+		if not (int(key) > 0 and int(key) <=8):
 			raise Exception('Invalid channel index %s' % key)
 		self.vehicle.channels.overrides[key]=None
-	def recover_default_channels(self):
+	def default_channels(self):
 		self.vehicle.channels.overrides={}
-
+	
 	def show(self):
-		distance=self.get_distance_metres(self.get_home(),self.get_location())
+		if self.get_home() is None:
+			raise Exception('Home is None ,please have a try after arming')
+		else:
+			distance=self.get_distance_metres(self.get_home(),self.get_location())
+			self._log('Distance to home:{0}'.format(distance))
+		location=self.get_location()
 		#print "distance to home:{0},heading:{1},location:{2}".format(distance,self.get_heading(),self.get_location())
-		print "distance to home:{0},heading:{1},alt:{2}".format(distance,self.get_heading(),self.get_alt())
+		self._log("heading:{0},lat:{1},lon:{2},alt:{3}".format(self.get_heading(),location.lat,location.lon,location.alt))
+
 	def close(self):
 		self._log("Close vehicle object")
 		self.vehicle.close()
@@ -449,6 +475,10 @@ class Drone(object):
 		if self.sitl is not None:
 			self._log('close SITL')
 			self.sitl.stop()
+
+	def __str__(self):
+		helper="Please read README.md"
+		return  helper
 	def _log(self, message):
 		print "[DEBUG]:"+message
 
@@ -456,21 +486,28 @@ class Drone(object):
 if __name__=="__main__":
 	
 	drone=Drone()
+	#print drone
+
+	print "Landing Gear Test"
+	drone.retract()
+	time.sleep(5)
+	drone.deploy()
+	time.sleep(5)
 	
 	drone.arm()
-	print drone.get_heading()
-	print drone.get_home()
-	#print drone.get_location()
-	#print drone.copter_info()
-	#print drone.pix_info()
-	
-	drone.set_airspeed(5)
-	drone.take_off(5)
-	print "init_position:"
-	drone.show()
-	drone.condition_yaw(0,False)
-	drone.fly_away(10)
-	drone.show()
+
+	# print 'Log'
+	# print drone.show()
+	# print drone.FlightController_info()
+	# print drone.UAV_info()
+	# drone.take_off(5)
+		
+	# drone.set_airspeed(5)
+	# print "init_position:"
+	# drone.show()
+	# drone.condition_yaw(0,False)
+	# drone.fly_velocity(10)
+	# drone.show()
 	
 	'''print "forward 10m"
 	
@@ -499,15 +536,13 @@ if __name__=="__main__":
 	print 'down 10m'
 	drone.down_v(10.0,2)
 	drone.show()'''
-	for x in range(0,15):
-		drone.fly_away(10,30)
-		drone.show()
-	drone.condition_yaw(0,False)
-	drone
-	drone.show()
-	drone.RTL()
-	time.sleep(40)
-	drone.show()
+
+	
+	# drone.condition_yaw(0,False)
+	# drone.show()
+	# drone.RTL()
+	# time.sleep(40)
+	# drone.show()
 	drone.close()
 
 	print("Completed")
