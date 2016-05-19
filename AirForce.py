@@ -10,14 +10,17 @@ from pymavlink import mavutil
 __college__='PKU'
 __author__ ='mengxz'
 __BeginningDate__   ='2016/4/13'
+__EndingDate__='2016/5/19'
 
 		
 class Drone(object):
 	def __init__(self,args=None):
 		self.gps_lock = False
+		self.altitude = 5.0
 		self.vehicle = self.connection(args)
 		#self.commands = self.vehicle.commands
 		self.home_location = None
+		self.current_location=None
 		self.sitl=None
 		
 	def connection(self,args):
@@ -37,8 +40,20 @@ class Drone(object):
 		print 'Connecting to vehicle on: %s' % connection_string
 		vehicle = connect(connection_string, wait_ready=True)
 		# Register observers
-		#self.vehicle.add_attribute_listener('location', self.location_callback)
+		vehicle.add_attribute_listener('location',self.location_callback)
+		vehicle.add_attribute_listener('battery',self.battery_callback)
+		#vehicle.add_attribute_listener('heading',self.heading_callback)
 		return vehicle
+	def location_callback(self, vehicle, name, location):
+		if location.global_relative_frame.alt is not None:
+			self.altitude = location.global_relative_frame.alt
+
+		self.current_location = location.global_relative_frame
+	def battery_callback(self,vehicle, name,battery):
+		if battery.level<20:
+			self._log('Alert !!! Low Battery ')
+	def heading_callback(self,vehicle,name,heading):
+		self._log('Current heading: {0}'.format(heading))
 	def get_vehicle(self):
 		return self.vehicle
 	def get_alt(self):
@@ -58,10 +73,18 @@ class Drone(object):
 		return bearing
 
 	def get_angle(self,lat,lon):
+		'''Returns the bearing between currentLocation and Given lat/lon''' 
 		aLoction1=self.get_location()
 		aLocation2=LocationGlobal(lat,lon)
 		return self.get_bearing(aLoction1,aLocation2)
-
+	def get_parameters(self):
+		self._log("\nPrint all parameters (iterate `vehicle.parameters`):")
+		for key, value in vehicle.parameters.iteritems():
+			print " Key:%s Value:%s" % (key,value)
+	def get_parameter(self,key):
+		return self.vehicle.parameters[key]
+	def set_parameter(self,key,value):
+		self.vehicle.parameters[key]=value
 	def set_airspeed(self,airspeed):
 		self.vehicle.airspeed=airspeed
 
@@ -69,12 +92,21 @@ class Drone(object):
 		self.vehicle.groundspeed=groundspeed
 
 	def arm(self):
+		
+		# Get Vehicle Home location - will be `None` until first set by autopilot
+		self._log("Waiting for home location...")
+		while not self.vehicle.home_location:
+			cmds = self.vehicle.commands
+			cmds.download()
+			cmds.wait_ready()
+			time.sleep(.1)
+		self._log("\n Home location: {0}" .format(self.vehicle.home_location))
 		#Get home_location
-		self._log("Waiting for location...")
+		
 		while self.vehicle.location.global_frame.lat==0:
 			time.sleep(.1)
 		self.home_location = self.get_location()
-		self._log('Home is:{0}'.format(self.get_home()))
+		self._log('\n Home is:{0}'.format(self.get_home()))
 		#Set GUIDED Mode
 		self._log("Set Vehicle.mode = GUIDED (currently: {0})".format(self.vehicle.mode.name) ) 
 		self.vehicle.mode = VehicleMode("GUIDED")
@@ -97,7 +129,7 @@ class Drone(object):
 		self._log("DisArming")
 		self.vehicle.armed=False
 		
-	def take_off(self,alt=5):
+	def takeoff(self,alt=5):
 		self._log("Taking off to {0}m".format(alt))
 		self.vehicle.simple_takeoff(alt)
 		# Wait until the vehicle reaches a safe height before processing the goto (otherwise the command after Vehicle.simple_takeoff will execute immediately).
@@ -108,12 +140,6 @@ class Drone(object):
 				break
 			time.sleep(1)
   
-	'''def location_callback(self, vehicle, name, location):
-		if location.global_relative_frame.alt is not None:
-			self.altitude = location.global_relative_frame.alt
-
-		self.current_location = [location.global_relative_frame.lat,location.global_relative_frame.lon,location.global_relative_frame.alt]
-		'''
 	def get_home(self):
 		return self.home_location
 		
@@ -160,7 +186,8 @@ class Drone(object):
 
 		return prefix + "%s.%s.%s" % (self.vehicle.version.major, self.vehicle.version.minor, self.vehicle.version.patch) + release_type
 
-	def FlightController_info(self):
+	def FC_info(self):
+		'''Return FlightControl information'''
 		vehicle=self.vehicle
 		
 		c=vehicle.capabilities
@@ -209,11 +236,11 @@ class Drone(object):
 				print "Reached target"
 				break;
 			time.sleep(2)
-	def goto(self,lat,lon,speed=2):
-		alt=self.get_alt()
-		self.set_airspeed(speed)
-		targetlocation=LocationGlobalRelative(lat,lon,alt)
-		self.vehicle.simple_goto(targetlocation)
+	def goto(self, location):
+		self._log("Goto: {0}, {1}".format(location, self.altitude))
+		
+		self.vehicle.simple_goto(LocationGlobalRelative(float(location[0]), float(location[1]),float(self.get_alt())))
+		self.vehicle.flush()
 
 	def report_remainingDistance(self,currentlocation,targetLocation):
 		targetDistance = self.get_distance_metres(currentlocation, targetLocation)   #get distance between currentlocation and targetlocation
@@ -249,6 +276,18 @@ class Drone(object):
 		0, 0, 0)    # param 5 ~ 7 not used
 		# send command to vehicle
 		self. vehicle.send_mavlink(msg)
+
+	def go_home(self,alt=None):
+		'''Default alt is current altitude'''
+		
+		if alt==None:
+			alt=self.get_alt()
+		lat=self.get_home().lat
+		lon=self.get_home().lon
+		self._log('Go Home!lat:{0} lon:{1} alt: {}'.format(lat,lon,alt))
+		aLocation=LocationGlobalRelative(lat,lon,alt)
+		self.vehicle.simple_goto(aLocation)
+
 	def set_roi(location):
 		# create the MAV_CMD_DO_SET_ROI command
 		msg = vehicle.message_factory.command_long_encode(
@@ -262,6 +301,7 @@ class Drone(object):
 			)
 		# send command to vehicle
 		vehicle.send_mavlink(msg)
+
 	def send_global_velocity(self,velocity_x, velocity_y, velocity_z, duration):
 		msg = self.vehicle.message_factory.set_position_target_global_int_encode(
 		0, 0, 0, mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT, 
@@ -315,37 +355,41 @@ class Drone(object):
 		self.send_body_offset_ned_position(0,0,distance)
 
 	#control movemnet by velocity
-	def forward_v(self,distance=0.5,velocity=1.0):
+	def forward(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
 		if duration==0:
 			duration=1
 		self.send_body_offset_ned_velocity(velocity,0,0,duration)
 		self.stop()
-	def backward_v(self,distance=0.5,velocity=1.0):
+	def backward(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
 		if duration==0:
 			duration=1
 		self.send_body_offset_ned_velocity(-velocity,0,0,duration)
 		self.stop()
-	def left_v(self,distance=0.5,velocity=1.0):
+	def left(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
 		if duration==0:
 			duration=1
 		self.send_body_offset_ned_velocity(0,-velocity,0,duration)
 		self.stop()
-	def right_v(self,distance=0.5,velocity=1.0):
+	def right(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
 		if duration==0:
 			duration=1
 		self.send_body_offset_ned_velocity(0,velocity,0,duration)
 		self.stop()
-	def up_v(self,distance=0.5,velocity=1.0):
+	def yaw_left(self,angle=3):
+		self.condition_yaw(-angle)
+	def yaw_right(self,angle=3):
+		self.condition_yaw(angle)
+	def up(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
 		if duration==0:
 			duration=1
 		self.send_body_offset_ned_velocity(0,0,-velocity,duration)
 		self.stop()
-	def down_v(self,distance=0.5,velocity=1.0):
+	def down(self,distance=0.5,velocity=1.0):
 		duration=distance/velocity
 		if duration==0:
 			duration=1
@@ -353,9 +397,10 @@ class Drone(object):
 		self.stop()
 	def stop(self):
 		self.send_body_offset_ned_velocity(0,0,0,1)
-	def fly_velocity(self,distance,heading=0,velocity=1.0):
-		self.condition_yaw(heading)
-		self.forward_v(distance,velocity)
+	def fly(self,distance,heading=0,velocity=1.0):
+		if not heading==0:
+			self.condition_yaw(heading)
+		self.forward(distance,velocity)
 		self._log('Reached')
 
 	def fly_position(self,distance,heading=0):
@@ -420,9 +465,10 @@ class Drone(object):
 		self._log("Return To Home")
 		self.vehicle.mode=VehicleMode("RTL")
 	def Land(self):
-		self._log("Land")
+		self.retract()
+		self._log("Landing...")
 		self.vehicle.mode=VehicleMode("LAND")
-	def Stabilize(self):
+	def Stab(self):
 		self._log("STABILIZE")
 		self.vehicle.mode=VehicleMode("STABILIZE")
 	def Loiter(self):
@@ -432,12 +478,24 @@ class Drone(object):
 		self._log('Althold')
 		self.vehicle.mode=VehicleMode("ALT_HOLD")
 
-	def deploy(self):    
-		self._log('Deploy Landing Gear')
-		self.vehicle.channels.overrides['8']=1100
-	def retract(self):    
-		self._log('Retract Landing Gear')
-		self.vehicle.channels.overrides['8']=1900
+	def deploy(self): 
+		'''LRG_SERVO_DEPLOY=1750''' 
+		if self.vehicle.channels['8']<1750:  
+			self._log('Deploy Landing Gear')
+			self.vehicle.channels.overrides['8']=1900
+			self._log('Waiting for deploying!')
+			time.sleep(3)
+		else:
+			self._log('yet deployed')
+	def retract(self):   
+		'''LRG_SERVO_RTRACT=1250'''  
+		if self.vehicle.channels['8']>1250:
+			self._log('Retract Landing Gear')
+			self.vehicle.channels.overrides['8']=1100
+			self._log('Waiting for retracting')
+			time.sleep(3)
+		else:
+			self._log('yet retracted')
 	def get_mode(self):
 		return self.vehicle.mode.name
 
@@ -485,64 +543,29 @@ class Drone(object):
 
 if __name__=="__main__":
 	
-	drone=Drone()
-	#print drone
-
-	print "Landing Gear Test"
-	drone.retract()
-	time.sleep(5)
-	drone.deploy()
-	time.sleep(5)
-	
+	drone=Drone(0)
+	print drone.FC_info()
 	drone.arm()
+	drone.takeoff(5)
+	drone.deploy()
+	drone.stop()
+	#drone.show()
+	drone.condition_yaw(135,False)
+	drone.fly(5)
+	#drone.show()
+	drone.fly(10,135)
+	#drone.show()
+	drone.fly(5,135)
+	#drone.show()
 
-	# print 'Log'
-	# print drone.show()
-	# print drone.FlightController_info()
-	# print drone.UAV_info()
-	# drone.take_off(5)
-		
-	# drone.set_airspeed(5)
-	# print "init_position:"
-	# drone.show()
-	# drone.condition_yaw(0,False)
-	# drone.fly_velocity(10)
-	# drone.show()
-	
-	'''print "forward 10m"
-	
-	drone.forward_v(10.0,2)
-	drone.show()
+	drone.go_home()
+	#time.sleep(10)
+	#drone.show()
+	drone.Land()
+	#time.sleep(10)
+	#drone.show()
 
-	print "backword 10m"
-	drone.condition_yaw(90)
-	drone.backward_v(10.0,2)
-	drone.show()
 
-	print 'left 10m'
-	drone.condition_yaw(30)
-	drone.left_v(10.0,2)
-	drone.show()
-
-	print 'right 10m'
-	drone.condition_yaw(30)
-	drone.right_v(10.0,2)
-	drone.show()
-
-	print 'up 10m'
-	drone.up_v(10.0,2)
-	drone.show()
-
-	print 'down 10m'
-	drone.down_v(10.0,2)
-	drone.show()'''
-
-	
-	# drone.condition_yaw(0,False)
-	# drone.show()
-	# drone.RTL()
-	# time.sleep(40)
-	# drone.show()
 	drone.close()
 
 	print("Completed")
