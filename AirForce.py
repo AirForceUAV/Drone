@@ -14,7 +14,7 @@ __EndingDate__='2016/5/19'
 
 		
 class Drone(object):
-	def __init__(self,args=None):
+	def __init__(self,args='sitl'):
 		self.gps_lock = False
 		self.altitude = 5.0
 		self.vehicle = self.connection(args)
@@ -24,8 +24,8 @@ class Drone(object):
 		self.sitl=None
 		
 	def connection(self,args):
-		if args is None:
-			print "Starting copter simulator (SITL)"
+		if args is 'sitl' or args is None:
+			self._log("Starting copter simulator (SITL)")
 			from dronekit_sitl import SITL
 			sitl = SITL()
 			self.sitl=sitl
@@ -33,12 +33,15 @@ class Drone(object):
 			sitl_args = ['-I0', '--model', 'quad', '--home=-35.363261,149.165230,584,353']
 			sitl.launch(sitl_args, await_ready=True, restart=True)
 			connection_string='tcp:127.0.0.1:5760'
-		elif args==0:
+		elif args==0 or args=='0':
 			connection_string='/dev/ttyACM0'
-		else:
+		elif args==1 or args=='1': 
 			connection_string='/dev/ttyACM1'
-		print 'Connecting to vehicle on: %s' % connection_string
+		else:
+			connection_string=args
+		self._log('Connecting to vehicle on: %s' % connection_string)
 		vehicle = connect(connection_string, wait_ready=True)
+		
 		# Register observers
 		vehicle.add_attribute_listener('location',self.location_callback)
 		vehicle.add_attribute_listener('battery',self.battery_callback)
@@ -51,7 +54,7 @@ class Drone(object):
 		self.current_location = location.global_relative_frame
 	def battery_callback(self,vehicle, name,battery):
 		if battery.level<20:
-			self._log('Alert !!! Low Battery ')
+			self._log('Alert ,Low Battery! Remaining Power: {0} '.format(battery.level))
 	def heading_callback(self,vehicle,name,heading):
 		self._log('Current heading: {0}'.format(heading))
 	def get_vehicle(self):
@@ -106,7 +109,7 @@ class Drone(object):
 		while self.vehicle.location.global_frame.lat==0:
 			time.sleep(.1)
 		self.home_location = self.get_location()
-		self._log('\n Home is:{0}'.format(self.get_home()))
+		#self._log('\n Home is:{0}'.format(self.get_home()))
 		#Set GUIDED Mode
 		self._log("Set Vehicle.mode = GUIDED (currently: {0})".format(self.vehicle.mode.name) ) 
 		self.vehicle.mode = VehicleMode("GUIDED")
@@ -144,6 +147,7 @@ class Drone(object):
 		return self.home_location
 		
 	def get_location(self):
+		self._log('Current Location:{0}'.format(self.vehicle.location.global_relative_frame))
 		return self.vehicle.location.global_relative_frame
 
 	def is_stable(self):
@@ -234,7 +238,7 @@ class Drone(object):
 			print "Distance to target: ", remainingDistance
 			if remainingDistance<=targetDistance*0.01: #Just below target, in case of undershoot.
 				print "Reached target"
-				break;
+				break
 			time.sleep(2)
 	def goto(self, location):
 		self._log("Goto: {0}, {1}".format(location, self.altitude))
@@ -262,6 +266,7 @@ class Drone(object):
 			is_cw=1
 		else:
 			is_cw=-1
+			heading=-heading
 
 		# create the CONDITION_YAW command using command_long_encode()
 
@@ -284,7 +289,7 @@ class Drone(object):
 			alt=self.get_alt()
 		lat=self.get_home().lat
 		lon=self.get_home().lon
-		self._log('Go Home!lat:{0} lon:{1} alt: {}'.format(lat,lon,alt))
+		self._log('Go Home!lat:{0} lon:{1} alt: {2}'.format(lat,lon,alt))
 		aLocation=LocationGlobalRelative(lat,lon,alt)
 		self.vehicle.simple_goto(aLocation)
 
@@ -412,6 +417,7 @@ class Drone(object):
 		self.report_remainingDistance(currentlocation,targetlocation)
 	
 	def get_heading(self):
+		#self._log('Current  heading:{0}'.format(self.vehicle.heading))
 		return self.vehicle.heading
 		
 	def get_location_metres(self,original_location, dNorth, dEast):
@@ -540,11 +546,11 @@ class Drone(object):
 	def _log(self, message):
 		print "[DEBUG]:"+message
 
-
 if __name__=="__main__":
+
 	
 	drone=Drone(0)
-	print drone.FC_info()
+	#print drone.FC_info()	
 	drone.arm()
 	drone.takeoff(5)
 	drone.deploy()
