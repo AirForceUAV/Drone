@@ -1,6 +1,6 @@
-API
+AirForce.py --API
 
---Get Param
+--Get
 #get_vehicle(self) 
 #get_alt(self)            --current altitude
 #get_home(self)       --home_location
@@ -13,7 +13,9 @@ API
 #FC_info(self)
 #UAV_info(self)
 
---Set Param
+--Set
+set_target_metres(self,dNorth,dEast):
+set_target(lat,lon)
 #set_airspeed(self,airspeed)
 #set_groundspeed(self,groundspeed)
 #set_roi(location)
@@ -66,3 +68,14 @@ get_channels(self)
 --Other
 show(self):   --Distance to home:{0},heading:{1},lat:{2},lon:{3},alt:{4}
 close(self)
+
+
+UAV.py -- API
+
+#Maing Portal
+#--connect= 'sitl'(default) or  0(/dev/ttyACM0)  or  1(/dev/ttyACM1)
+#--cloud=1(default) or 0
+#--ip='139.217.26.207'
+#--lida=1(default) or 0
+lida.go()
+lida.got_test()
