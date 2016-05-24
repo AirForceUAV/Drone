@@ -45,7 +45,7 @@ class Drone(object):
 
 		# Register observers
 		vehicle.add_attribute_listener('location',self.location_callback)
-		vehicle.add_attribute_listener('battery',self.battery_callback)
+		#vehicle.add_attribute_listener('battery',self.battery_callback)
 		#vehicle.add_attribute_listener('heading',self.heading_callback)
 		return vehicle
 	def location_callback(self, vehicle, name, location):

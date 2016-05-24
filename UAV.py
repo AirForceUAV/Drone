@@ -25,11 +25,12 @@ class Lida(object):
 			return 0		
 		while True:
 			angle_heading=self.drone.get_angle_heading()
+			print("Angle_heading_target:{0}".format(angle_heading))
 			decision=strategy.Decision(angle_heading)
 			distance1=decision[0]
 			angle=decision[1]
 			distance2=self.drone.get_distance_metres(self.drone.get_location(),target)
-			distance=math.min(distance1,distance2)
+			distance=min(distance1,distance2)
 			if distance<0.2:
 				self.drone._log("Reached Waypoint!")
 				return 1						
@@ -47,7 +48,7 @@ class Lida(object):
 		distance1=decision[0]
 		angle=decision[1]
 		distance2=self.drone.get_distance_metres(self.drone.get_location(),target)
-		distance=math.min(distance1,distance2)
+		distance=min(distance1,distance2)
 		if distance<0.2:
 			self.drone._log("Reached Waypoint!")
 			return 1			
@@ -87,10 +88,10 @@ if __name__=='__main__':
 		print("Connecting to Lida ...")
 		lida=Lida(drone)
 	else:
-		print('disconnected to Lidad!')
+		print('disconnected to Lida!')
 	# sitl:-35.363261,149.165230
 	# drone.set_target(-35.38,149.184)
-	# drone.set_target(10,10)
+	# drone.set_target_metres(10,10)
 	# lida.go()
 	
 
