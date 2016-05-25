@@ -6,7 +6,7 @@ import time,math,json
 from pymavlink import mavutil
 
 
-__college__='PKU'
+__Organization__='AirForceUAV'
 __author__ ='mengxz'
 __BeginningDate__   ='2016/4/13'
 __EndingDate__='2016/5/22'
@@ -79,22 +79,23 @@ class Drone(object):
 			bearing += 360.00
 		return bearing
 
-	def get_angle_north(self,lat,lon):
+	def angle_north_target(self,target):
 		'''Returns the bearing between currentLocation and Given lat/lon''' 
-		aLoction1=self.get_location()
-		aLocation2=LocationGlobal(lat,lon)
-		angle_North=self.get_bearing(aLoction1,aLocation2)		
+		UAVLoction=self.get_location()
+		
+		angle_North=self.get_bearing(UAVLoction,target)		
 		return int(angle_North)
 
-	def get_angle_heading(self):
+	def angle_heading_target(self):
+		#
 		target=self.get_target()
 		if target is None:
 			self._log("Target is None! ")
-			return None
-		angle_North=self.get_angle_north(target.lat,target.lon)
+			return 0
+		angle_North=self.angle_north_target(target)
 		angle_heading=angle_North-self.get_heading()
 		if angle_heading<0:
-			angle_heading+=360	
+			angle_heading+=360
 		return int(angle_heading)
 	def get_parameters(self):
 		self._log("\nPrint all parameters (iterate `vehicle.parameters`):")
@@ -249,7 +250,7 @@ class Drone(object):
 		return encodedjson
 
 	def goto_NED(self,dNorth,dEast):
-		currentLocation=self.vehicle.location.global_relative_frame
+		currentLocation=self.get_location()
 		targetLocation=self.get_location_metres(currentLocation, dNorth, dEast)
 		targetDistance=self.get_distance_metres(currentLocation, targetLocation)
 		self.vehicle.simple_goto(targetLocation)
@@ -439,6 +440,12 @@ class Drone(object):
 	def fly(self,distance,heading=0,velocity=1.0):
 		if heading is not 0:
 			self.condition_yaw(heading)
+			# target_heading=self.get_heading()+heading
+			# if target_heading<0:
+			# 	target_heading+=360
+			# while abs(target_heading-self.get_heading())>1:
+			# 	time.sleep(.1)
+
 		self.forward(distance,velocity)
 		self._log('Reached')
 
@@ -577,7 +584,12 @@ class Drone(object):
 		location=self.get_location()
 		#print "distance to home:{0},heading:{1},location:{2}".format(distance,self.get_heading(),self.get_location())
 		self._log("heading:{0},lat:{1},lon:{2},alt:{3}".format(self.get_heading(),location.lat,location.lon,location.alt))
-
+	def show2(self):		
+		north_to_target=self.angle_north_target(self.get_target())
+		heading_to_target=self.angle_heading_target()
+		heading=self.get_heading()
+		distance=self.get_distance_metres(self.get_location(),self.get_target())
+		self._log("Heading:{0};north to target:{1};heading to target:{2};Distance to target:{3}".format(heading,north_to_target,heading_to_target,distance))
 	def close(self):
 		self._log("Close vehicle object")
 		self.vehicle.close()
@@ -595,7 +607,6 @@ class Drone(object):
 if __name__=="__main__":
 	drone=Drone()
 	#print drone.FC_info()	
-	#print drone.get_angle_north(-35.453261,149.245230)
 	print drone.get_parameters()
 	drone.arm()
 	drone.takeoff(5)
