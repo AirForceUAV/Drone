@@ -178,8 +178,8 @@ class Drone(object):
 			if self.vehicle.location.global_relative_frame.alt>=alt*0.95: #Trigger just below target alt.				
 				self._log("Reached target altitude")
 				break
-			#time.sleep(1)
-		#self.stop()
+			time.sleep(1)
+		self.stop()
   
 	def get_home(self):
 		return self.home_location
@@ -478,9 +478,9 @@ class Drone(object):
 	def fly(self,distance,heading=0,velocity=1.0):
 		if heading is not 0:
 			self.condition_yaw(heading)
-			# target_heading=(self.get_heading()+heading)%360
-			# while abs(target_heading-self.get_heading())>2:
-			# 	time.sleep(.1)
+			target_heading=(self.get_heading()+heading)%360
+			while abs(target_heading-self.get_heading())>2:
+				time.sleep(.1)
 
 		self.forward(distance,velocity)
 		self._log('Reached')

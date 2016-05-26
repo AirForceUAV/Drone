@@ -23,7 +23,7 @@ def eval_wrapper(command):
 	eval(command)	
 
 def on_message(client, userdata, msg):
-	print str(msg.payload)
+	#print str(msg.payload)
 	requests = threadpool.makeRequests(eval_wrapper,(str(msg.payload),))
 	[pool.putRequest(req) for req in requests]
 	#eval(str(msg.payload))
