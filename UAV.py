@@ -17,7 +17,7 @@ def _log(message):
 
 def on_connect(client, userdata, rc):
 	print("Connected with result code "+str(rc))
-	client.subscribe("Command")
+	client.subscribe("Command",qos=1)
 
 def eval_wrapper(command):
 	eval(command)	
