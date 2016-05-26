@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import threading,time
+import threading,time,threadpool,functools
 # import sys,os
 # home=os.path.expanduser('~')
 # path=home+"/ObstacleAvoidance"
@@ -10,15 +10,23 @@ __Organization__='AirForceUAV'
 __Author__='mengxz'
 __BeginningDate__='2016/5/19'
 
+pool = threadpool.ThreadPool(1)
+
 def _log(message):
 	print "[DEBUG]:"+message
 
 def on_connect(client, userdata, rc):
 	print("Connected with result code "+str(rc))
 	client.subscribe("Command")
-	
+
+def eval_wrapper(command):
+	eval(command)	
+
 def on_message(client, userdata, msg):
-	eval(str(msg.payload))
+	print str(msg.payload)
+	requests = threadpool.makeRequests(eval_wrapper,(str(msg.payload),))
+	[pool.putRequest(req) for req in requests]
+	#eval(str(msg.payload))
 
 def conn_cloud(drone,ip,port=1883):
 	import paho.mqtt.client as mqtt	

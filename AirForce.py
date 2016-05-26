@@ -178,7 +178,7 @@ class Drone(object):
 			if self.vehicle.location.global_relative_frame.alt>=alt*0.95: #Trigger just below target alt.				
 				self._log("Reached target altitude")
 				break
-			time.sleep(1)
+			#time.sleep(1)
 		#self.stop()
   
 	def get_home(self):
@@ -645,7 +645,7 @@ class Drone(object):
 	def Distance_to_target(self):
 		if self.target is not None:
 			distance=self.get_distance_metres(self.get_location(),self.get_target())
-			return str(distance)
+			return str(round(distance,2))
 		else:
 			return str(-1)
 	def show(self):
@@ -697,7 +697,6 @@ if __name__=="__main__":
 	drone.Land()
 	#time.sleep(10)
 	#drone.show()
-
 
 	drone.close()
 
