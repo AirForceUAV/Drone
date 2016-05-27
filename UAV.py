@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time,threadpool
+from AirForce import Drone,CancelWatcher
 # import sys,os
 # home=os.path.expanduser('~')
 # path=home+"/ObstacleAvoidance"
@@ -20,13 +21,19 @@ def on_connect(client, userdata, rc):
 	client.subscribe("Command",qos=1)
 
 def eval_wrapper(command):
-	print(command)
+	# print(command)
 	eval(command)	
 
 def on_message(client, userdata, msg):
-	#print str(msg.payload)
-	requests = threadpool.makeRequests(eval_wrapper,(str(msg.payload),))
-	[pool.putRequest(req) for req in requests]
+	print str(msg.payload)
+	if "Cancel" not in str(msg.payload):
+		requests = threadpool.makeRequests(eval_wrapper,(str(msg.payload),))
+		[pool.putRequest(req) for req in requests]
+	else:
+		CancelWatcher.Cancel=True
+		requests = threadpool.makeRequests(eval_wrapper,("drone.stop()",))
+		[pool.putRequest(req) for req in requests]
+
 	#eval(str(msg.payload))
 
 def conn_cloud(drone,ip,port=1883):
@@ -59,40 +66,44 @@ class Ladar(object):
 		self.drone=drone
 
 	def go(self):
+		watcher=CancelWatcher()
 		target=self.drone.get_target()
 		if target is None:
 			self.drone._log("Target is None!Please set_target(lat,lon)")
-			return 0		
-		while True:
+			return 0	
+		while not watcher.IsCancel():
+			distance2=self.drone.get_distance_metres(self.drone.get_location(),target)			
+			if distance2<3:
+				self.drone._log("Reached Waypoint!")
+				return 1	
 			angle_heading=self.drone.angle_heading_target()
 			decision=strategy.Decision(angle_heading)
 			distance1=decision[0]
-			angle=decision[1]
-			distance2=self.drone.get_distance_metres(self.drone.get_location(),target)
-			distance=min(distance1,distance2)
-			if distance<3:
-				self.drone._log("Reached Waypoint!")
-				return 1						
+			angle=decision[1]	
+			distance=min(distance1,distance2)				
 			self.drone.fly(distance,angle)
+		return 0
 		
 
 	def go_test(self):
 		target=self.drone.get_target()
 		if target is None:
 			self._log("Target is None!Please set_target(lat,lon)")
-			return 0	
+			return 0			
+		distance2=self.drone.get_distance_metres(self.drone.get_location(),target)
+		
+		if distance2<3:
+			self.drone._log("Reached Waypoint!")
+			return 1		
+		self.drone.show2()
 		angle_heading=self.drone.angle_heading_target()
 		decision=strategy.Decision(angle_heading)
 		distance1=decision[0]
-		angle=decision[1]
-		distance2=self.drone.get_distance_metres(self.drone.get_location(),target)
+		angle=decision[1]	
 		distance=min(distance1,distance2)
-		if distance<3:
-			self.drone._log("Reached Waypoint!")
-			return 1		
-		self.drone.show2()	
 		self.drone.fly(distance,angle)
 		self.drone.show2()	
+		return 0
 
 
 if __name__=='__main__':
@@ -112,7 +123,7 @@ if __name__=='__main__':
 	ip=args.ip
 	port=args.port
 
-	from AirForce import Drone
+	
 	drone=Drone(connection_string)
 	if ladar==1:
 		from strategy import strategy
@@ -128,7 +139,8 @@ if __name__=='__main__':
 	# drone.arm()
 	# drone.takeoff(1)
 	# drone.set_channel(3,1300)
-	# drone.set_target_metres(0,1000)
+	# drone.stop()
+	# drone.set_target_metres(-100,0)
 	# while True:		
 	# 	raw_input("next")
 	# 	if ladar.go_test()==1:

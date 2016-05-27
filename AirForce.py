@@ -11,6 +11,13 @@ __author__ ='mengxz'
 __BeginningDate__   ='2016/4/13'
 __EndingDate__='2016/5/22'
 
+class CancelWatcher(object):
+	Cancel=False
+	def IsCancel(self):
+		return self.__class__.Cancel
+	def __del__(self):
+		self.__class__.Cancel = False
+
 		
 class Drone(object):
 	def __init__(self,args='sitl'):
@@ -120,10 +127,11 @@ class Drone(object):
 		self.vehicle.groundspeed=groundspeed
 
 	def arm(self):
+		watcher=CancelWatcher()
 		
 		# Get Vehicle Home location - will be `None` until first set by autopilot
 		self._log("Waiting for home location...")
-		while not self.vehicle.home_location:
+		while not self.vehicle.home_location and not watcher.IsCancel():
 			cmds = self.vehicle.commands
 			cmds.download()
 			cmds.wait_ready()
@@ -132,7 +140,7 @@ class Drone(object):
 		self.client.publish("Home","{0},{1},{2}".format(self.vehicle.home_location.lat,self.vehicle.home_location.lon,self.vehicle.home_location.alt))
 		# Get home_location
 		
-		while self.vehicle.location.global_frame.lat==0:
+		while self.vehicle.location.global_frame.lat==0 and not watcher.IsCancel():
 			time.sleep(.1)
 		self.home_location = self.get_location()
 		#self._log('\n Home is:{0}'.format(self.get_home()))
@@ -145,13 +153,13 @@ class Drone(object):
 		self._log('current mode :{0}'.format(self.vehicle.mode.name))
 		#Check is_armable
 		self._log("Waiting for ability to arm...")
-		while not self.vehicle.is_armable:
+		while not self.vehicle.is_armable and not watcher.IsCancel():
 			time.sleep(.1)
 
 		#Armed
 		self.vehicle.armed = True
 		self._log("Waiting for arming...")
-		while not self.vehicle.armed:      			
+		while not self.vehicle.armed and not watcher.IsCancel():      			
 			time.sleep(.1)
 	
 	def disarm(self):
@@ -159,17 +167,17 @@ class Drone(object):
 		self.vehicle.armed=False
 		
 	def takeoff(self,alt=5):
+		watcher=CancelWatcher()
 		self._log("Taking off to {0}m".format(alt))
 		self.vehicle.simple_takeoff(alt)
 		# Wait until the vehicle reaches a safe height before processing the goto (otherwise the command after Vehicle.simple_takeoff will execute immediately).
-		while True:
-			#self._log("Altitude: {0}".format(self.get_location().alt))   
-			#self.publisher()
+		while not watcher.IsCancel():
 			if self.vehicle.location.global_relative_frame.alt>=alt*0.95: #Trigger just below target alt.				
 				self._log("Reached target altitude")
 				break
 			time.sleep(1)
-		self.stop()
+		if not watcher.IsCancel():
+			self.stop()
   
 	def get_home(self):
 		return self.home_location
@@ -268,7 +276,7 @@ class Drone(object):
 			if remainingDistance<=targetDistance*0.01: #Just below target, in case of undershoot.
 				print "Reached target"
 				break
-			time.sleep(2)
+			time.sleep(1)
 	def goto(self, lat,lon):
 		self._log("Goto: {0},{1} ,{2}".format(lat,lon, self.altitude))
 		
@@ -448,19 +456,19 @@ class Drone(object):
 	def stop(self):
 		self.send_body_offset_ned_velocity(0,0,0,1)
 
+
 	def fly(self,distance,heading=0,velocity=1.0):
+		watcher = CancelWatcher()
 		if heading is not 0:
 			self.condition_yaw(heading)
 			target_heading=(self.get_heading()+heading)%360
 			if target_heading<0:
 				target_heading+=360
-			timeout=0
-			while abs(target_heading-self.get_heading())>2 and timeout<20:
-				timeout+=1
+			while abs(target_heading-self.get_heading())>2 and not watcher.IsCancel():
 				time.sleep(1)
-
-		self.forward(distance,velocity)
-		self._log('Reached')
+		if not watcher.IsCancel():
+			self.forward(distance,velocity)
+			self._log('Reached')
 
 	def fly_position(self,distance,heading=0):
 		currentlocation=self.get_location()		
