@@ -20,6 +20,7 @@ def on_connect(client, userdata, rc):
 	client.subscribe("Command",qos=1)
 
 def eval_wrapper(command):
+	print(command)
 	eval(command)	
 
 def on_message(client, userdata, msg):
