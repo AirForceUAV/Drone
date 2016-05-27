@@ -81,17 +81,7 @@ class Drone(object):
 		return bearing
 	def set_client(self,client):
 		self.client=client
-	def publisher(self):
-		if self.client is not None:
-			self.client.publish('LocationGlobal',self.LocationGlobal_info())
-			self.client.publish('Velocity',self.Velocity_info())
-			self.client.publish('GPS',self.GPS_info())
-			self.client.publish('Battery',self.Battery_info())
-			self.client.publish('Heading',self.Heading_info())
-			self.client.publish('DistanceToHome',self.Distance_from_home())
-			self.client.publish('DistanceToTarget',self.Distance_to_target())
-		else:
-			print("Client is None!")
+
 	def angle_north_target(self,target):
 		'''Returns the bearing between currentLocation and Given lat/lon''' 
 		UAVLoction=self.get_location()
@@ -228,62 +218,44 @@ class Drone(object):
 
 		return prefix + "%s.%s.%s" % (self.vehicle.version.major, self.vehicle.version.minor, self.vehicle.version.patch) + release_type
 
-	def FC_info(self):
-		'''Return FlightControl information'''
-		vehicle=self.vehicle
-		
+	def Firmware(self):
+		'''Return Firmware information'''
+		vehicle=self.vehicle		
 		c=vehicle.capabilities
 		version=self.version()
-
-		obj={
-			'Version':version,
-			'Capabilities':(c.mission_float,c.param_float,c.mission_int,c.command_int,c.param_union,c.ftp,c.set_attitude_target,
-			 c.set_attitude_target_local_ned,c.set_altitude_target_global_int,c.terrain,c.set_actuator_target,c.flight_termination,c.compass_calibration),
-			}
+		firmware={}
+		firmware['Version']=version
+		firmware['Capabilities']="{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}".format(c.mission_float,c.param_float,c.mission_int,c.command_int,c.param_union,c.ftp,c.set_attitude_target,\
+			 c.set_attitude_target_local_ned,c.set_altitude_target_global_int,c.terrain,c.set_actuator_target,c.flight_termination,c.compass_calibration)
 				
-		encodedjson=json.dumps(obj)
-		return encodedjson
+		return json.dumps(firmware)
 
-	def UAV_info(self):
-		vehicle=self.vehicle
-		obj={'LocationGlobal':(vehicle.location.global_relative_frame.lat,vehicle.location.global_relative_frame.lon,vehicle.location.global_relative_frame.alt),
-			'Local_location':(vehicle.location.local_frame.north,vehicle.location.local_frame.east,vehicle.location.local_frame.down),
-			'Attitude':(vehicle.attitude.pitch,vehicle.attitude.yaw,vehicle.attitude.roll),
-			'Velocity':(vehicle.velocity[0],vehicle.velocity[1],vehicle.velocity[2]),
-			'GPS':(vehicle.gps_0.eph,vehicle.gps_0.epv,vehicle.gps_0.fix_type,vehicle.gps_0.satellites_visible),
-			'Gimbal_status':(vehicle.gimbal.pitch,vehicle.gimbal.yaw,vehicle.gimbal.roll),
-			'Battery':(vehicle.battery.voltage,vehicle.battery.current,vehicle.battery.level),
-			'EKF':vehicle.ekf_ok,
-			'LastHeartbeat':vehicle.last_heartbeat,
-			'Rangefinder':(vehicle.rangefinder.distance,vehicle.rangefinder.voltage),
-			'Heading':vehicle.heading,
-			'Groundspeed':vehicle.groundspeed,
-			'Airspeed':vehicle.airspeed,
-			'System_status':vehicle.system_status.state,
-			'Mode':vehicle.mode.name
-			}
-		encodedjson=json.dumps(obj)
-		return encodedjson
-	def UAV_status(self):
-		vehicle=self.vehicle
-		obj={'LocationGlobal':(vehicle.location.global_relative_frame.lat,vehicle.location.global_relative_frame.lon,vehicle.location.global_relative_frame.alt),
-			'Local_location':(vehicle.location.local_frame.north,vehicle.location.local_frame.east,vehicle.location.local_frame.down),
-			'Attitude':(vehicle.attitude.pitch,vehicle.attitude.yaw,vehicle.attitude.roll),
-			'Velocity':vehicle.velocity,
-			'GPS':(vehicle.gps_0.eph,vehicle.gps_0.epv,vehicle.gps_0.fix_type,vehicle.gps_0.satellites_visible),
-			'Gimbal_status':(vehicle.gimbal.pitch,vehicle.gimbal.yaw,vehicle.gimbal.roll),
-			'Battery':(vehicle.battery.voltage,vehicle.battery.current,vehicle.battery.level),
-			'EKF':vehicle.ekf_ok,
-			'LastHeartbeat':vehicle.last_heartbeat,
-			'Rangefinder':(vehicle.rangefinder.distance,vehicle.rangefinder.voltage),
-			'Heading':vehicle.heading,
-			'Groundspeed':vehicle.groundspeed,
-			'Airspeed':vehicle.airspeed,
-			'System_status':vehicle.system_status.state,
-			'Mode':vehicle.mode.name
-			}
-		encodedjson=json.dumps(obj)
-		return encodedjson
+	def FlightLog(self):
+		status={}
+		gps=self.vehicle.gps_0
+		gimbal=self.vehicle.gimbal
+		battery=self.vehicle.battery
+		status["Battery"]="{0},{1},{2}".format(battery.voltage,battery.current,battery.level)
+		status["GPS"]="{0},{1},{2}".format(gps.eph,gps.epv,gps.fix_type,gps.satellites_visible)
+		status["Attitude"]=self.Attitude_info()
+		status["LocationGlobal"]=self.LocationGlobal_info()		
+		status["Heading"]=self.Heading_info()
+		status["Velocity"]=self.Velocity_info()		
+		status["Gimbal"]="{0},{1},{2}".format(gimbal.pitch,gimbal.yaw,gimbal.roll)
+		status["EKF"]="{0}".format(self.vehicle.ekf_ok)
+		status["Rangefinder"]="{0},{1}".format(self.vehicle.rangefinder.distance,self.vehicle.rangefinder.voltage)
+		status["Groundspeed"]=str(self.vehicle.groundspeed)
+		status["Airspeed"]=str(self.vehicle.airspeed)
+		status["SystemStatus"]=self.vehicle.system_status.state
+		status["Mode"]=self.vehicle.mode.name
+		channels=[]
+		for i in range(1,9):
+			channels.append(str(self.vehicle.channels[str(i)]))
+		status["Channels"]=	",".join(channels)
+		
+		return json.dumps(status)
+		# return status
+	
 	def goto_NED(self,dNorth,dEast):
 		currentLocation=self.get_location()
 		targetLocation=self.get_location_metres(currentLocation, dNorth, dEast)
@@ -430,8 +402,9 @@ class Drone(object):
 		self._log("Forward to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
 		if duration<1:
-			duration=1
-		self.send_body_offset_ned_velocity(velocity,0,0,duration)
+			self.send_body_offset_ned_velocity(distance,0,0,1)
+		else:
+			self.send_body_offset_ned_velocity(velocity,0,0,int(duration))
 		self.stop()
 	def backward(self,distance=0.5,velocity=1.0):
 		self._log("Backward to {0}m,velocity is {1}m/s".format(distance,velocity))
@@ -479,8 +452,12 @@ class Drone(object):
 		if heading is not 0:
 			self.condition_yaw(heading)
 			target_heading=(self.get_heading()+heading)%360
-			while abs(target_heading-self.get_heading())>2:
-				time.sleep(.1)
+			if target_heading<0:
+				target_heading+=360
+			timeout=0
+			while abs(target_heading-self.get_heading())>2 and timeout<20:
+				timeout+=1
+				time.sleep(1)
 
 		self.forward(distance,velocity)
 		self._log('Reached')
@@ -675,28 +652,8 @@ class Drone(object):
 
 if __name__=="__main__":
 	drone=Drone()
-	#print drone.FC_info()	
-	#print drone.get_parameters()
-	drone.arm()
-	drone.takeoff(5)
-	drone.set_channel(8,1100)
-	drone.deploy()
-	drone.stop()
-	#drone.show()
-	drone.condition_yaw(135,False)
-	drone.fly(5)
-	#drone.show()
-	drone.fly(10,135)
-	#drone.show()
-	drone.fly(5,135)
-	#drone.show()
-
-	drone.go_home()
-	#time.sleep(10)
-	#drone.show()
-	drone.Land()
-	#time.sleep(10)
-	#drone.show()
+	#print(drone.Firmware())
+	print(drone.FlightLog())
 
 	drone.close()
 
