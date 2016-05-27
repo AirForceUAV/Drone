@@ -148,7 +148,7 @@ class Drone(object):
 		self._log("Set Vehicle.mode = GUIDED (currently: {0})".format(self.vehicle.mode.name) ) 
 		self.vehicle.mode = VehicleMode("GUIDED")
 		self._log("Waiting for mode change ...")
-		while not self.vehicle.mode.name=='GUIDED':  #Wait until mode has changed			
+		while not self.vehicle.mode.name=='GUIDED' and not watcher.IsCancel():  #Wait until mode has changed			
 			time.sleep(.1)
 		self._log('current mode :{0}'.format(self.vehicle.mode.name))
 		#Check is_armable
@@ -464,7 +464,7 @@ class Drone(object):
 			target_heading=(self.get_heading()+heading)%360
 			if target_heading<0:
 				target_heading+=360
-			while abs(target_heading-self.get_heading())>2 and not watcher.IsCancel():
+			while abs(target_heading-self.get_heading())>5 and not watcher.IsCancel():
 				time.sleep(1)
 		if not watcher.IsCancel():
 			self.forward(distance,velocity)
