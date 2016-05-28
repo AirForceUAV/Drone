@@ -47,11 +47,11 @@ class Drone(object):
 		elif args=='USB':
 			connection_string='/dev/ttyACM0'
 		elif args=='Tele': 
-			connection_string='/dev/ttyACM1'
+			connection_string='/dev/ttyUSB0'
 		else:
 			connection_string=args
 		self._log('Connecting to vehicle on: %s' % connection_string)
-		vehicle = connect(connection_string, wait_ready=True)
+		vehicle = connect(connection_string,wait_ready=True)
 
 		# Register observers
 		# vehicle.add_attribute_listener('location',self.location_callback)
@@ -228,45 +228,6 @@ class Drone(object):
 			release_type = "-" + str(self.release_type()) + str(self.release_version())
 
 		return prefix + "%s.%s.%s" % (self.vehicle.version.major, self.vehicle.version.minor, self.vehicle.version.patch) + release_type
-
-	def Firmware(self):
-		'''Return Firmware information'''
-		vehicle=self.vehicle		
-		c=vehicle.capabilities
-		version=self.version()
-		firmware={}
-		firmware['Version']=version
-		firmware['Capabilities']="{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}".format(c.mission_float,c.param_float,c.mission_int,c.command_int,c.param_union,c.ftp,c.set_attitude_target,\
-			 c.set_attitude_target_local_ned,c.set_altitude_target_global_int,c.terrain,c.set_actuator_target,c.flight_termination,c.compass_calibration)
-		firmware["TimeStamp"]=str(time.time())		
-		return json.dumps(firmware)
-
-	def FlightLog(self):
-		status={}
-		gps=self.vehicle.gps_0
-		gimbal=self.vehicle.gimbal
-		battery=self.vehicle.battery
-		status["Battery"]="{0},{1},{2}".format(battery.voltage,battery.current,battery.level)
-		status["GPS"]="{0},{1},{2},{3}".format(gps.eph,gps.epv,gps.fix_type,gps.satellites_visible)
-		status["Attitude"]=self.Attitude_info()
-		status["LocationGlobal"]=self.LocationGlobal_info()		
-		status["Heading"]=self.Heading_info()
-		status["Velocity"]=self.Velocity_info()		
-		status["Gimbal"]="{0},{1},{2}".format(gimbal.pitch,gimbal.yaw,gimbal.roll)
-		status["EKF"]="{0}".format(self.vehicle.ekf_ok)
-		status["Rangefinder"]="{0},{1}".format(self.vehicle.rangefinder.distance,self.vehicle.rangefinder.voltage)
-		status["Groundspeed"]=str(self.vehicle.groundspeed)
-		status["Airspeed"]=str(self.vehicle.airspeed)
-		status["SystemStatus"]=self.vehicle.system_status.state
-		status["Mode"]=self.vehicle.mode.name
-		status["TimeStamp"]=str(time.time())
-		channels=[]
-		for i in range(1,9):
-			channels.append(str(self.vehicle.channels[str(i)]))
-		status["Channels"]=	",".join(channels)
-		
-		return json.dumps(status)
-		# return status
 	
 	def goto_NED(self,dNorth,dEast):
 		currentLocation=self.get_location()
@@ -469,7 +430,7 @@ class Drone(object):
 			if target_heading<0:
 				target_heading+=360
 			while abs(target_heading-self.get_heading())>5 and not watcher.IsCancel():
-				time.sleep(1)
+				time.sleep(.1)
 		if not watcher.IsCancel():
 			self.forward(distance,velocity)
 			self._log('Reached')
@@ -613,18 +574,6 @@ class Drone(object):
 		return str(self.vehicle.battery.level)
 	def Heading_info(self):
 		return str(self.vehicle.heading)
-	def CopterStatus(self):
-		status={}
-		status["Battery"]=self.Battery_info()
-		status["GPS"]=self.GPS_info()
-		status["Attitude"]=self.Attitude_info()
-		status["LocationGlobal"]=self.LocationGlobal_info()		
-		status["Heading"]=self.Heading_info()
-		status["Velocity"]=self.Velocity_info()		
-		status["DistanceFromHome"]=self.Distance_from_home()
-		status["DistanceToTarget"]=self.Distance_to_target()
-		
-		return json.dumps(status)
 	def Distance_from_home(self):
 		if self.get_home() is not None:
 			distance=self.get_distance_metres(self.get_home(),self.get_location())
@@ -637,6 +586,56 @@ class Drone(object):
 			return str(round(distance,2))
 		else:
 			return str(-1)
+	def CopterStatus(self):
+		status={}
+		status["Battery"]=self.Battery_info()
+		status["GPS"]=self.GPS_info()
+		status["Attitude"]=self.Attitude_info()
+		status["LocationGlobal"]=self.LocationGlobal_info()		
+		status["Heading"]=self.Heading_info()
+		status["Velocity"]=self.Velocity_info()		
+		status["DistanceFromHome"]=self.Distance_from_home()
+		status["DistanceToTarget"]=self.Distance_to_target()
+		
+		return json.dumps(status)
+	def Firmware(self):
+		'''Return Firmware information'''
+		vehicle=self.vehicle		
+		c=vehicle.capabilities
+		version=self.version()
+		firmware={}
+		firmware['Version']=version
+		firmware['Capabilities']="{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}".format(c.mission_float,c.param_float,c.mission_int,c.command_int,c.param_union,c.ftp,c.set_attitude_target,\
+			 c.set_attitude_target_local_ned,c.set_altitude_target_global_int,c.terrain,c.set_actuator_target,c.flight_termination,c.compass_calibration)
+		firmware["TimeStamp"]=str(time.time())	
+
+		return json.dumps(firmware)
+
+	def FlightLog(self):
+		status={}
+		gps=self.vehicle.gps_0
+		gimbal=self.vehicle.gimbal
+		battery=self.vehicle.battery
+		status["Battery"]="{0},{1},{2}".format(battery.voltage,battery.current,battery.level)
+		status["GPS"]="{0},{1},{2},{3}".format(gps.eph,gps.epv,gps.fix_type,gps.satellites_visible)
+		status["Attitude"]=self.Attitude_info()
+		status["LocationGlobal"]=self.LocationGlobal_info()		
+		status["Heading"]=self.Heading_info()
+		status["Velocity"]=self.Velocity_info()		
+		status["Gimbal"]="{0},{1},{2}".format(gimbal.pitch,gimbal.yaw,gimbal.roll)
+		status["EKF"]="{0}".format(self.vehicle.ekf_ok)
+		status["Rangefinder"]="{0},{1}".format(self.vehicle.rangefinder.distance,self.vehicle.rangefinder.voltage)
+		status["Groundspeed"]=str(self.vehicle.groundspeed)
+		status["Airspeed"]=str(self.vehicle.airspeed)
+		status["SystemStatus"]=self.vehicle.system_status.state
+		status["Mode"]=self.vehicle.mode.name
+		status["TimeStamp"]=str(time.time())
+		channels=[]
+		for i in range(1,9):
+			channels.append(str(self.vehicle.channels[str(i)]))
+		status["Channels"]=	",".join(channels)
+		
+		return json.dumps(status)
 	def show(self):
 		distance=self.Distance_from_home()
 		location=self.get_location()
@@ -660,14 +659,16 @@ class Drone(object):
 		helper="Please read README.md"
 		return  helper
 	def _log(self, message):
-		if self.eventHub == None:
-			print "[DEBUG]:"+message
-		else:
-			log={}
-			log["Navigation"]=message
-			log["TimeStamp"]=str(time.time())
-			# print(json.dumps(log))
-			self.eventHub.send_event('airforceuav', json.dumps(log))
+		# if self.eventHub == None:
+		# 	print "[DEBUG]:"+message
+		# else:
+		# 	print "[DEBUG]:"+message
+		# 	log={}
+		# 	log["Navigation"]=message
+		# 	log["TimeStamp"]=str(time.time())
+		# 	# print(json.dumps(log))
+		# 	self.eventHub.send_event('airforceuav', json.dumps(log))
+		print "[DEBUG]:"+message
 
 if __name__=="__main__":
 	drone=Drone()
