@@ -14,14 +14,14 @@ __BeginningDate__='2016/5/19'
 pool = threadpool.ThreadPool(1)
 
 def _log(message):
-	print "[DEBUG]:"+message
+	print ">>> "+message
 
 def on_connect(client, userdata, rc):
-	print("Connected with result code "+str(rc))
+	_log("Connected with result code "+str(rc))
 	client.subscribe("Command",qos=1)
 
 def eval_wrapper(command):
-	# print(command)
+	# solve namespace problem.
 	eval(command)	
 
 def on_message(client, userdata, msg):
@@ -40,21 +40,20 @@ def conn_cloud(drone,ip,port=1883):
 	import paho.mqtt.client as mqtt	
 	client = mqtt.Client(client_id='companion',clean_session=True,userdata=None)
 	client.reinitialise(client_id='companion',clean_session=True, userdata=None)
-	#client.max_inflight_messages_set(1)
-	drone.set_client(client)
+	drone.set_mqtt(client)
 	client.on_connect = on_connect
 	client.on_message = on_message
-	#print('Connecting to cloud ... ip={0} port={1}'.format(ip,port))
-
+	_log('Connecting to cloud by mqtt... ip={0} port={1}'.format(ip,port))
 	client.connect(ip, 1883)
 	client.loop_start()		
 	
-
 	from azure.servicebus import ServiceBusService
 
 	api_key=dict(namespace='AirForceUAV-ns',policy_name='RootManageSharedAccessKey',policy_secret='3bP2rrfIKLbWkQvSwBEJB1iawxhwUdoBC/lDYbRReSI=',host_base='.servicebus.chinacloudapi.cn')
 	sbs = ServiceBusService(api_key["namespace"], shared_access_key_name=api_key["policy_name"], shared_access_key_value=api_key["policy_secret"],host_base=api_key['host_base'])
+	_log('Connecting to eventHub of cloud...')
 	# sbs.send_event("airforceuav",drone.Firmware())
+	drone.set_eventHub(sbs)
 	while True:
 		client.publish('CopterStatus',drone.CopterStatus())
 		sbs.send_event('airforceuav', drone.FlightLog())
@@ -69,15 +68,15 @@ class Ladar(object):
 		watcher=CancelWatcher()
 		target=self.drone.get_target()
 		if target is None:
-			self.drone._log("Target is None!Please set_target(lat,lon)")
+			self.drone._log("Target is None!Please drone.set_target(lat,lon) or drone.set_target_metres(dNorth,dEast).")
 			return 0	
 		while not watcher.IsCancel():
-			distance2=self.drone.get_distance_metres(self.drone.get_location(),target)			
-			if distance2<3:
-				self.drone._log("Reached Waypoint!")
+			distance2=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)			
+			if distance2<2:
+				self.drone._log("Reached Target Waypoint!")
 				return 1	
-			angle_heading=self.drone.angle_heading_target()
-			decision=strategy.Decision(angle_heading)
+			angle_heading_target=self.drone.angle_heading_target()
+			decision=strategy.Decision(angle_heading_target)
 			distance1=decision[0]
 			angle=decision[1]	
 			distance=min(distance1,distance2)				
@@ -90,19 +89,19 @@ class Ladar(object):
 		if target is None:
 			self._log("Target is None!Please set_target(lat,lon)")
 			return 0			
-		distance2=self.drone.get_distance_metres(self.drone.get_location(),target)
+		distance2=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)
 		
 		if distance2<3:
-			self.drone._log("Reached Waypoint!")
+			self.drone._log("Reached Target Waypoint!")
 			return 1		
 		self.drone.show2()
-		angle_heading=self.drone.angle_heading_target()
-		decision=strategy.Decision(angle_heading)
+		angle_heading_target=self.drone.angle_heading_target()
+		decision=strategy.Decision(angle_heading_target)
 		distance1=decision[0]
 		angle=decision[1]	
 		distance=min(distance1,distance2)
 		self.drone.fly(distance,angle)
-		self.drone.show2()	
+		# self.drone.show2()	
 		return 0
 
 
@@ -127,20 +126,22 @@ if __name__=='__main__':
 	drone=Drone(connection_string)
 	if ladar==1:
 		from strategy import strategy
-		print("Connecting to Ladar ...")
+		_log("Connecting to Ladar ...")
 		ladar=Ladar(drone)
 	else:
-		print('Disconnected to Ladar!')
+		_log('Disconnect to Ladar!')
+
 	if cloud==1:
+
 		conn_cloud(drone,ip,port)
 	else:
-		print('Disconnected to cloud!')
+		_log('Disconnect to Azure!')
 
 	# drone.arm()
 	# drone.takeoff(1)
 	# drone.set_channel(3,1300)
-	# drone.stop()
 	# drone.set_target_metres(-100,0)
+	# drone.stop()
 	# while True:		
 	# 	raw_input("next")
 	# 	if ladar.go_test()==1:

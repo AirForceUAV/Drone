@@ -7,7 +7,7 @@ from pymavlink import mavutil
 
 
 __Organization__='AirForceUAV'
-__author__ ='mengxz'
+__Author__ ='mengxz'
 __BeginningDate__   ='2016/4/13'
 __EndingDate__='2016/5/22'
 
@@ -23,13 +23,15 @@ class Drone(object):
 	def __init__(self,args='sitl'):
 		self.gps_lock = False
 		self.altitude = 5.0
-		self.vehicle = self.connection(args)
+		self.mqtt=None
+		self.eventHub=None
 		#self.commands = self.vehicle.commands
 		self.home_location = None
 		self.current_location=None
 		self.sitl=None
 		self.target=None
-		self.client=None
+		self.vehicle = self.connection(args)
+	
 		
 	def connection(self,args):
 		args=str(args)
@@ -42,28 +44,27 @@ class Drone(object):
 			sitl_args = ['-I0', '--model', 'quad', '--home=39.757880,116.357050,584,0']
 			sitl.launch(sitl_args, await_ready=True, restart=True)
 			connection_string='tcp:127.0.0.1:5760'
-		elif args=='0':
+		elif args=='USB':
 			connection_string='/dev/ttyACM0'
-		elif args=='1': 
+		elif args=='Tele': 
 			connection_string='/dev/ttyACM1'
 		else:
-			connection_string=str(args)
+			connection_string=args
 		self._log('Connecting to vehicle on: %s' % connection_string)
 		vehicle = connect(connection_string, wait_ready=True)
 
 		# Register observers
 		# vehicle.add_attribute_listener('location',self.location_callback)
-		#vehicle.add_attribute_listener('battery',self.battery_callback)
-		#vehicle.add_attribute_listener('heading',self.heading_callback)
+		# vehicle.add_attribute_listener('battery',self.battery_callback)
+		# vehicle.add_attribute_listener('heading',self.heading_callback)
 		return vehicle
 	def location_callback(self, vehicle, name, location):
 		if location.global_relative_frame.alt is not None:
 			self.altitude = location.global_relative_frame.alt
-
 		self.current_location = location.global_relative_frame
 	def battery_callback(self,vehicle, name,battery):
 		if battery.level<20:
-			self._log('Alert ,Low Battery! Remaining Power: {0} '.format(battery.level))
+			self._log('Low Battery! Remaining Power: {0} '.format(battery.level))
 	def heading_callback(self,vehicle,name,heading):
 		self._log('Current heading: {0}'.format(heading))
 	def get_vehicle(self):
@@ -86,9 +87,10 @@ class Drone(object):
 		if bearing < 0:
 			bearing += 360.00
 		return bearing
-	def set_client(self,client):
-		self.client=client
-
+	def set_mqtt(self,mqtt):
+		self.mqtt=mqtt
+	def set_eventHub(self,eventHub):
+		self.eventHub=eventHub
 	def angle_north_target(self,target):
 		'''Returns the bearing between currentLocation and Given lat/lon''' 
 		UAVLoction=self.get_location()
@@ -108,7 +110,7 @@ class Drone(object):
 			angle_heading+=360
 		return int(angle_heading)
 	def get_parameters(self):
-		self._log("\nPrint all parameters (iterate `vehicle.parameters`):")
+		self._log("Print all parameters (iterate `vehicle.parameters`):")
 		params={}
 		for key, value in self.vehicle.parameters.iteritems():
 			params[key]=value
@@ -136,8 +138,9 @@ class Drone(object):
 			cmds.download()
 			cmds.wait_ready()
 			time.sleep(.1)
-		self._log("\n Home location: {0}" .format(self.vehicle.home_location))
-		self.client.publish("Home","{0},{1},{2}".format(self.vehicle.home_location.lat,self.vehicle.home_location.lon,self.vehicle.home_location.alt))
+		home=self.vehicle.home_location
+		self._log("Home location: {0}" .format(self.home))
+		self.mqtt.publish("Home","{0},{1},{2}".format(home.lat,home.lon,home.alt))
 		# Get home_location
 		
 		while self.vehicle.location.global_frame.lat==0 and not watcher.IsCancel():
@@ -163,7 +166,7 @@ class Drone(object):
 			time.sleep(.1)
 	
 	def disarm(self):
-		self._log("DisArming")
+		self._log("DisArmed")
 		self.vehicle.armed=False
 		
 	def takeoff(self,alt=5):
@@ -235,7 +238,7 @@ class Drone(object):
 		firmware['Version']=version
 		firmware['Capabilities']="{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}".format(c.mission_float,c.param_float,c.mission_int,c.command_int,c.param_union,c.ftp,c.set_attitude_target,\
 			 c.set_attitude_target_local_ned,c.set_altitude_target_global_int,c.terrain,c.set_actuator_target,c.flight_termination,c.compass_calibration)
-				
+		firmware["TimeStamp"]=str(time.time())		
 		return json.dumps(firmware)
 
 	def FlightLog(self):
@@ -244,7 +247,7 @@ class Drone(object):
 		gimbal=self.vehicle.gimbal
 		battery=self.vehicle.battery
 		status["Battery"]="{0},{1},{2}".format(battery.voltage,battery.current,battery.level)
-		status["GPS"]="{0},{1},{2}".format(gps.eph,gps.epv,gps.fix_type,gps.satellites_visible)
+		status["GPS"]="{0},{1},{2},{3}".format(gps.eph,gps.epv,gps.fix_type,gps.satellites_visible)
 		status["Attitude"]=self.Attitude_info()
 		status["LocationGlobal"]=self.LocationGlobal_info()		
 		status["Heading"]=self.Heading_info()
@@ -256,6 +259,7 @@ class Drone(object):
 		status["Airspeed"]=str(self.vehicle.airspeed)
 		status["SystemStatus"]=self.vehicle.system_status.state
 		status["Mode"]=self.vehicle.mode.name
+		status["TimeStamp"]=str(time.time())
 		channels=[]
 		for i in range(1,9):
 			channels.append(str(self.vehicle.channels[str(i)]))
@@ -278,7 +282,7 @@ class Drone(object):
 				break
 			time.sleep(1)
 	def goto(self, lat,lon):
-		self._log("Goto: {0},{1} ,{2}".format(lat,lon, self.altitude))
+		self._log("Goto,lat: {0},lon: {1},alt: {2}".format(lat,lon,self.altitude))
 		
 		self.vehicle.simple_goto(LocationGlobalRelative(float(lat), float(lon),float(self.get_alt())))
 		self.vehicle.flush()
@@ -308,7 +312,7 @@ class Drone(object):
 			is_cw=-1
 			heading=360-heading
 			self._log("Turn Left:{0}".format(heading))
-		elif heading<0:
+		elif heading<0 and heading>-180:
 			is_cw=-1
 			heading=-heading
 			self._log("Turn Left:{0}".format(heading))
@@ -515,7 +519,7 @@ class Drone(object):
 
 	def set_target(self,lat,lon):
 		if lat is None or lon is None:
-			self._log("lat or lon can not be empty!")
+			self._log("lat or lon is empty!")
 		else:
 			self.target = LocationGlobalRelative(lat,lon,self.get_alt())
 			self._log("New target is {0}".format(self.target))
@@ -562,19 +566,19 @@ class Drone(object):
 		if self.vehicle.channels['8']<1750:  
 			self._log('Deploy Landing Gear')
 			self.vehicle.channels.overrides['8']=1900
-			self._log('Waiting for deploying!')
+			self._log('Waiting for deploying LandingGear!')
 			time.sleep(3)
 		else:
-			self._log('yet deployed')
+			self._log('Yet deployed')
 	def retract(self):   
 		'''LRG_SERVO_RTRACT=1250'''  
 		if self.vehicle.channels['8']>1250:
 			self._log('Retract Landing Gear')
 			self.vehicle.channels.overrides['8']=1100
-			self._log('Waiting for retracting')
+			self._log('Waiting for retracting LandingGear')
 			time.sleep(3)
 		else:
-			self._log('yet retracted')
+			self._log('Yet retracted')
 	def get_mode(self):
 		return self.vehicle.mode.name
 
@@ -588,11 +592,11 @@ class Drone(object):
 		if not (int(key) > 0 and int(key) <=8):
 			raise Exception('Invalid channel index %s' % key)
 		self.vehicle.channels.overrides[key]=value
-	def default_channel(self,key):
+	def set_default_channel(self,key):
 		if not (int(key) > 0 and int(key) <=8):
 			raise Exception('Invalid channel index %s' % key)
 		self.vehicle.channels.overrides[key]=None
-	def default_channels(self):
+	def set_default_channels(self):
 		self.vehicle.channels.overrides={}	
 	def LocationGlobal_info(self):
 		location=self.get_location()
@@ -637,7 +641,7 @@ class Drone(object):
 		distance=self.Distance_from_home()
 		location=self.get_location()
 		#print "distance to home:{0},heading:{1},location:{2}".format(distance,self.get_heading(),self.get_location())
-		self._log("heading:{0},lat:{1},lon:{2},alt:{3},Distance_from_home:{4}".format(self.get_heading(),location.lat,location.lon,location.alt,distance))
+		self._log("Heading:{0},Lat:{1},Lon:{2},Alt:{3},Distance_from_home:{4}".format(self.get_heading(),location.lat,location.lon,location.alt,distance))
 	def show2(self):		
 		north_to_target=self.angle_north_target(self.get_target())
 		heading_to_target=self.angle_heading_target()
@@ -656,7 +660,14 @@ class Drone(object):
 		helper="Please read README.md"
 		return  helper
 	def _log(self, message):
-		print "[DEBUG]:"+message
+		if self.eventHub == None:
+			print "[DEBUG]:"+message
+		else:
+			log={}
+			log["Navigation"]=message
+			log["TimeStamp"]=str(time.time())
+			# print(json.dumps(log))
+			self.eventHub.send_event('airforceuav', json.dumps(log))
 
 if __name__=="__main__":
 	drone=Drone()
