@@ -10,14 +10,23 @@ from AirForce import Drone,CancelWatcher
 __Organization__='AirForceUAV'
 __Author__='mengxz'
 __BeginningDate__='2016/5/19'
+__EndingDate__='2016/5/29'
 
-pool = threadpool.ThreadPool(1)
-
+mqttPool = threadpool.ThreadPool(1)
+eventPool=threadpool.ThreadPool(1)
 def _log(message):
 	print ">>> "+message
 
+def init_sbs():
+	from azure.servicebus import ServiceBusService
+
+	api_key=dict(namespace='AirForceUAV-ns',policy_name='RootManageSharedAccessKey',policy_secret='3bP2rrfIKLbWkQvSwBEJB1iawxhwUdoBC/lDYbRReSI=',host_base='.servicebus.chinacloudapi.cn')
+	sbs = ServiceBusService(api_key["namespace"], shared_access_key_name=api_key["policy_name"], shared_access_key_value=api_key["policy_secret"],host_base=api_key['host_base'])
+	return sbs
+
 def on_connect(client, userdata, rc):
-	_log("Connected with result code "+str(rc))
+	_log("Connected mqtt with result code "+str(rc))
+	#Subscribe Topic "Command"
 	client.subscribe("Command",qos=1)
 
 def eval_wrapper(command):
@@ -28,38 +37,38 @@ def on_message(client, userdata, msg):
 	print str(msg.payload)
 	if "Cancel" not in str(msg.payload):
 		requests = threadpool.makeRequests(eval_wrapper,(str(msg.payload),))
-		[pool.putRequest(req) for req in requests]
+		[mqttPool.putRequest(req) for req in requests]
 	else:
 		CancelWatcher.Cancel=True
 		requests = threadpool.makeRequests(eval_wrapper,("drone.stop()",))
-		[pool.putRequest(req) for req in requests]
+		[mqttPool.putRequest(req) for req in requests]
 
 	# eval(str(msg.payload))
 
-def conn_cloud(drone,ip,port=1883):
+
+def init_mqtt(ip,port=1883):
 	import paho.mqtt.client as mqtt	
 	client = mqtt.Client(client_id='companion',clean_session=True,userdata=None)
 	client.reinitialise(client_id='companion',clean_session=True, userdata=None)
 	drone.set_mqtt(client)
 	client.on_connect = on_connect
 	client.on_message = on_message
-	_log('Connecting to cloud by mqtt... ip={0} port={1}'.format(ip,port))
 	client.connect(ip, 1883)
 	client.loop_start()		
+	return client
 	
-	# from azure.servicebus import ServiceBusService
+def SendEventStream_wrapper(sbs):
+	#solve namespace problem
+	SendEventStream(sbs)
 
-	# api_key=dict(namespace='AirForceUAV-ns',policy_name='RootManageSharedAccessKey',policy_secret='3bP2rrfIKLbWkQvSwBEJB1iawxhwUdoBC/lDYbRReSI=',host_base='.servicebus.chinacloudapi.cn')
-	# sbs = ServiceBusService(api_key["namespace"], shared_access_key_name=api_key["policy_name"], shared_access_key_value=api_key["policy_secret"],host_base=api_key['host_base'])
-	# _log('Connecting to eventHub of cloud...')
-	# sbs.send_event("airforceuav",drone.Firmware())
-	# drone.set_eventHub(sbs)
+def SendEventStream(sbs):
+	# print(type(drone),type(sbs))	
 	while True:
-		client.publish('CopterStatus',drone.CopterStatus())
-		# sbs.send_event('airforceuav', drone.FlightLog())
+		message=drone.FlightLog()
+		# print(message)
+		sbs.send_event('airforceuav',message)
 		time.sleep(1)
-def event_hub(drone):
-	pass
+
 class Ladar(object):
 	def __init__(self,drone):
 		self.drone=drone
@@ -91,22 +100,20 @@ class Ladar(object):
 			return 0			
 		distance2=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)
 		
-		if distance2<3:
+		if distance2<2:
 			self.drone._log("Reached Target Waypoint!")
 			return 1		
-		self.drone.show2()
+		# self.drone.show2()
 		angle_heading_target=self.drone.angle_heading_target()
 		decision=strategy.Decision(angle_heading_target)
 		distance1=decision[0]
 		angle=decision[1]	
 		distance=min(distance1,distance2)
-		self.drone.fly(distance,angle)
-		# self.drone.show2()	
+		self.drone.fly(distance,angle)	
 		return 0
 
 
-if __name__=='__main__':
-	# Set up option parsing to get connection string
+if __name__=="__main__":
 	import argparse  
 	parser = argparse.ArgumentParser(description='Obstacle avoidance system based flight control of open source. ')
 	parser.add_argument('--connect', help="vehicle connection target string. 'sitl':sitl;0:/dev/ttyACM0;1:/dev/ttyACM1;If not specified or sitl, SITL is automatically started and used.",default='sitl')
@@ -122,7 +129,7 @@ if __name__=='__main__':
 	ip=args.ip
 	port=args.port
 
-	
+		
 	drone=Drone(connection_string)
 	if ladar==1:
 		from strategy import strategy
@@ -132,11 +139,24 @@ if __name__=='__main__':
 		_log('Disconnect to Ladar!')
 
 	if cloud==1:
+		_log('Connecting to Azure by sbs...')
+		sbs=init_sbs()
+		drone.set_sbs(sbs)
+		requests = threadpool.makeRequests(SendEventStream_wrapper,(sbs,))
+		[eventPool.putRequest(req) for req in requests]
+		# eventPool.wait()
 
-		conn_cloud(drone,ip,port)
+		_log('Connecting to Azure by mqtt ...')
+		mqtt=init_mqtt(ip,port)
+		# drone.set_mqtt(mqtt)
+		while True:
+			mqtt.publish('CopterStatus',drone.CopterStatus())		
+			time.sleep(1)
 	else:
 		_log('Disconnect to Azure!')
 
+	
+# 
 	# drone.arm()
 	# drone.takeoff(1)
 	# drone.set_channel(3,1300)
