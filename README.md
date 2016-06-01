@@ -103,3 +103,10 @@ close()
 lida.go()
 lida.got_test()
 ```
+#git clone
+```bash
+git clone git@github.com/dronekit/dronekit-python.git
+git clone git://github.com/mavlink/mavlink.git
+git clone git@github.com/AirForceUAV/pixController.git
+git clone git@github.com:AirForceUAV/ObstacleAvoidance.git
+```
