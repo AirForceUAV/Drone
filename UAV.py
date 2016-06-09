@@ -9,20 +9,14 @@ from AirForce import Drone,CancelWatcher
 
 __Organization__='AirForceUAV'
 __Author__='mengxz'
-__BeginningDate__='2016/5/19'
-__EndingDate__='2016/5/29'
+__BeginningDate__='2016/5/1'
+__EndingDate__='2016/6/9'
 
 mqttPool = threadpool.ThreadPool(1)
 eventPool=threadpool.ThreadPool(1)
+
 def _log(message):
 	print ">>> "+message
-
-def init_sbs():
-	from azure.servicebus import ServiceBusService
-
-	api_key=dict(namespace='AirForceUAV-ns',policy_name='RootManageSharedAccessKey',policy_secret='3bP2rrfIKLbWkQvSwBEJB1iawxhwUdoBC/lDYbRReSI=',host_base='.servicebus.chinacloudapi.cn')
-	sbs = ServiceBusService(api_key["namespace"], shared_access_key_name=api_key["policy_name"], shared_access_key_value=api_key["policy_secret"],host_base=api_key['host_base'])
-	return sbs
 
 def on_connect(client, userdata, rc):
 	_log("Connected mqtt with result code "+str(rc))
@@ -56,6 +50,13 @@ def init_mqtt(ip,port=1883):
 	client.connect(ip, 1883)
 	client.loop_start()		
 	return client
+
+def init_sbs():
+	from azure.servicebus import ServiceBusService
+
+	api_key=dict(namespace='AirForceUAV-ns',policy_name='RootManageSharedAccessKey',policy_secret='3bP2rrfIKLbWkQvSwBEJB1iawxhwUdoBC/lDYbRReSI=',host_base='.servicebus.chinacloudapi.cn')
+	sbs = ServiceBusService(api_key["namespace"], shared_access_key_name=api_key["policy_name"], shared_access_key_value=api_key["policy_secret"],host_base=api_key['host_base'])
+	return sbs
 	
 def SendEventStream_wrapper(sbs):
 	#solve namespace problem
@@ -148,7 +149,7 @@ if __name__=="__main__":
 
 		_log('Connecting to Azure by mqtt ...')
 		mqtt=init_mqtt(ip,port)
-		# drone.set_mqtt(mqtt)
+		drone.set_mqtt(mqtt)
 		while True:
 			mqtt.publish('CopterStatus',drone.CopterStatus())		
 			time.sleep(1)
