@@ -20,7 +20,7 @@ def _log(message):
 
 def on_connect(client, userdata, rc):
 	_log("Connected mqtt with result code "+str(rc))
-	#Subscribe Topic "Command"
+	# Subscribe Topic "Command"
 	client.subscribe("Command",qos=1)
 
 def eval_wrapper(command):
@@ -54,7 +54,9 @@ def init_mqtt(ip,port=1883):
 def init_sbs():
 	from azure.servicebus import ServiceBusService
 
-	api_key=dict(namespace='AirForceUAV-ns',policy_name='RootManageSharedAccessKey',policy_secret='3bP2rrfIKLbWkQvSwBEJB1iawxhwUdoBC/lDYbRReSI=',host_base='.servicebus.chinacloudapi.cn')
+	# api_key=dict(namespace='AirForceUAV-ns',policy_name='RootManageSharedAccessKey',policy_secret='3bP2rrfIKLbWkQvSwBEJB1iawxhwUdoBC/lDYbRReSI=',host_base='.servicebus.chinacloudapi.cn')
+	api_key=dict(namespace='airforceuav',policy_name='RootManageSharedAccessKey',policy_secret='mdq0pk8QTd/VXelOfL7VgQtJQ4Xto2HtVs0rfF2JuOE=',host_base='.servicebus.windows.net')
+
 	sbs = ServiceBusService(api_key["namespace"], shared_access_key_name=api_key["policy_name"], shared_access_key_value=api_key["policy_secret"],host_base=api_key['host_base'])
 	return sbs
 	
@@ -82,7 +84,7 @@ class Ladar(object):
 			return 0	
 		while not watcher.IsCancel():
 			distance2=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)			
-			if distance2<2:
+			if distance2<3:
 				self.drone._log("Reached Target Waypoint!")
 				return 1	
 			angle_heading_target=self.drone.angle_heading_target()
@@ -101,7 +103,7 @@ class Ladar(object):
 			return 0			
 		distance2=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)
 		
-		if distance2<2:
+		if distance2<3:
 			self.drone._log("Reached Target Waypoint!")
 			return 1		
 		# self.drone.show2()

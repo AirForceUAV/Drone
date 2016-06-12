@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from dronekit import connect, VehicleMode, LocationGlobalRelative, LocationGlobal
-import time,math,json,threadpool
+import time,math,json,threadpool,threading
 from pymavlink import mavutil
 from my_vehicle import MyVehicle
 
@@ -21,6 +21,7 @@ class CancelWatcher(object):
 		self.__class__.count+=1
 		# mutex.release()
 	def IsCancel(self):
+		# print(self.__class__.Cancel)
 		return self.__class__.Cancel
 	def __del__(self):
 		# mutex.acquire()
@@ -367,6 +368,7 @@ class Drone(object):
 			time.sleep(1)   
 
 	def send_body_offset_ned_velocity(self,forward,right,down,duration):
+		watcher=CancelWatcher()
 		msg=self.vehicle.message_factory.set_position_target_local_ned_encode(
 		0,0,0,mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED,
 		0b0000111111000111,
@@ -374,9 +376,22 @@ class Drone(object):
 		forward,right,down,    #vx,vy,vz
 		0,0,0,   #afx,afy,afz
 		0,0)    #yaw yaw_rate
+
+		defer=1
+		if duration>3:
+			duration-=3
+		elif duration==3:
+			duration=1
+			defer=3
+
 		for x in range(0,int(duration)):
-			self.vehicle.send_mavlink(msg)
-			time.sleep(1)
+			if not watcher.IsCancel():
+				self.vehicle.send_mavlink(msg)
+				time.sleep(defer)
+			else:
+				break
+
+		
 	def send_body_offset_ned_position(self,forward=0,right=0,down=0):
 		msg=self.vehicle.message_factory.set_position_target_local_ned_encode(
 		0,0,0,mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED,
@@ -405,30 +420,32 @@ class Drone(object):
 	def forward(self,distance=1.0,velocity=1.0):
 		self._log("Forward to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
-		if duration<1:
-			self.send_body_offset_ned_velocity(distance,0,0,1)
-		else:
-			self.send_body_offset_ned_velocity(velocity,0,0,int(duration))
+
+		self.send_body_offset_ned_velocity(velocity,0,0,duration)
 		self.stop()
+
+	def forward_no_stop(self,distance=1.0,velocity=1.0):
+		self._log("Forward to {0}m,velocity is {1}m/s".format(distance,velocity))
+		duration=distance/velocity
+
+		self.send_body_offset_ned_velocity(velocity,0,0,duration)
+
 	def backward(self,distance=1.0,velocity=1.0):
 		self._log("Backward to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
-		if duration<1:
-			duration=1
+		
 		self.send_body_offset_ned_velocity(-velocity,0,0,duration)
 		self.stop()
 	def left(self,distance=1.0,velocity=1.0):
 		self._log("Left to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
-		if duration<1:
-			duration=1
+		
 		self.send_body_offset_ned_velocity(0,-velocity,0,duration)
 		self.stop()
 	def right(self,distance=1.0,velocity=1.0):
 		self._log("Right to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
-		if duration<1:
-			duration=1
+		
 		self.send_body_offset_ned_velocity(0,velocity,0,duration)
 		self.stop()
 	def yaw_left(self,angle=3):
@@ -438,15 +455,13 @@ class Drone(object):
 	def up(self,distance=1.0,velocity=1.0):
 		self._log("Up to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
-		if duration<1:
-			duration=1
+		
 		self.send_body_offset_ned_velocity(0,0,-velocity,duration)
 		self.stop()
-	def down(self,distance=1.0,velocity=1.0):
+	def down(self,distance=1.0,velocity=0.5):
 		self._log("Down to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
-		if duration<1:
-			duration=1
+		
 		self.send_body_offset_ned_velocity(0,0,velocity,duration)
 		self.stop()
 	def stop(self):
@@ -463,8 +478,8 @@ class Drone(object):
 			while abs(target_heading-self.get_heading())>2 and not watcher.IsCancel():
 				time.sleep(.1)
 		if not watcher.IsCancel():
-			self.forward(distance,velocity)
-			self._log('Reached')
+			# self.forward(distance,velocity)
+			self.forward_no_stop(distance,velocity)
 
 	def fly_position(self,distance,heading=0):
 		currentlocation=self.get_location()		
@@ -651,7 +666,7 @@ class Drone(object):
 		firmware['Version']=version
 		firmware['Capabilities']="{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}".format(c.mission_float,c.param_float,c.mission_int,c.command_int,c.param_union,c.ftp,c.set_attitude_target,\
 			 c.set_attitude_target_local_ned,c.set_altitude_target_global_int,c.terrain,c.set_actuator_target,c.flight_termination,c.compass_calibration)
-		firmware["TimeStamp"]=int(time.time())	
+		firmware["TimeStamp"]=time.time()
 
 		return json.dumps(firmware)
 
@@ -660,6 +675,7 @@ class Drone(object):
 		gps=self.vehicle.gps_0
 		gimbal=self.vehicle.gimbal
 		battery=self.vehicle.battery
+		status["id"]=time.time()
 		status["Battery"]="{0},{1},{2}".format(battery.voltage,battery.current,battery.level)
 		status["GPS"]="{0},{1},{2},{3}".format(gps.eph,gps.epv,gps.fix_type,gps.satellites_visible)
 		status["Attitude"]=self.Attitude_info()
@@ -678,8 +694,7 @@ class Drone(object):
 		status["DistanceFromHome"]=self.Distance_from_home()
 		status["DistanceToTarget"]=self.Distance_to_target()
 		status["IMU"]=self.vehicle.raw_imu.display()
-		status["ServoOutput"]=self.vehicle.servo_output.display()
-		status["TimeStamp"]=int(time.time())
+		status["ServoOutput"]=self.vehicle.servo_output.display()	
 		channels=[]
 		for i in range(1,9):
 			channels.append(str(self.vehicle.channels[str(i)]))
