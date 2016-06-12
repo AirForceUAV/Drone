@@ -377,20 +377,26 @@ class Drone(object):
 		0,0,0,   #afx,afy,afz
 		0,0)    #yaw yaw_rate
 
-		defer=1
 		if duration>3:
-			duration-=3
+			for x in range(0,int(duration-2)):
+				if not watcher.IsCancel():
+					self.vehicle.send_mavlink(msg)
+					time.sleep(1)
+				else:
+					break
 		elif duration==3:
-			duration=1
-			defer=3
-
-		for x in range(0,int(duration)):
-			if not watcher.IsCancel():
-				self.vehicle.send_mavlink(msg)
-				time.sleep(defer)
-			else:
-				break
-
+			self.vehicle.send_mavlink(msg)
+			time.sleep(3)
+		elif duration==0:
+			pass
+		else:
+			for x in range(0,int(duration)):
+				if not watcher.IsCancel():
+					self.vehicle.send_mavlink(msg)
+					time.sleep(1)
+				else:
+					break
+			self.stop()
 		
 	def send_body_offset_ned_position(self,forward=0,right=0,down=0):
 		msg=self.vehicle.message_factory.set_position_target_local_ned_encode(
@@ -424,30 +430,24 @@ class Drone(object):
 		self.send_body_offset_ned_velocity(velocity,0,0,duration)
 		self.stop()
 
-	def forward_no_stop(self,distance=1.0,velocity=1.0):
-		self._log("Forward to {0}m,velocity is {1}m/s".format(distance,velocity))
-		duration=distance/velocity
-
-		self.send_body_offset_ned_velocity(velocity,0,0,duration)
-
 	def backward(self,distance=1.0,velocity=1.0):
 		self._log("Backward to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
 		
 		self.send_body_offset_ned_velocity(-velocity,0,0,duration)
-		self.stop()
+
 	def left(self,distance=1.0,velocity=1.0):
 		self._log("Left to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
 		
 		self.send_body_offset_ned_velocity(0,-velocity,0,duration)
-		self.stop()
+
 	def right(self,distance=1.0,velocity=1.0):
 		self._log("Right to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
 		
 		self.send_body_offset_ned_velocity(0,velocity,0,duration)
-		self.stop()
+
 	def yaw_left(self,angle=3):
 		self.condition_yaw(-angle)
 	def yaw_right(self,angle=3):
@@ -457,16 +457,22 @@ class Drone(object):
 		duration=distance/velocity
 		
 		self.send_body_offset_ned_velocity(0,0,-velocity,duration)
-		self.stop()
+
 	def down(self,distance=1.0,velocity=0.5):
 		self._log("Down to {0}m,velocity is {1}m/s".format(distance,velocity))
 		duration=distance/velocity
 		
 		self.send_body_offset_ned_velocity(0,0,velocity,duration)
-		self.stop()
-	def stop(self):
-		self.send_body_offset_ned_velocity(0,0,0,1)
 
+	def stop(self):
+		msg=self.vehicle.message_factory.set_position_target_local_ned_encode(
+		0,0,0,mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED,
+		0b0000111111000111,
+		0,0,0,
+		0,0,0,    #vx,vy,vz
+		0,0,0,   #afx,afy,afz
+		0,0)
+		self.vehicle.send_mavlink(msg)
 
 	def fly(self,distance,heading=0,velocity=1.0):
 		watcher = CancelWatcher()
@@ -478,8 +484,7 @@ class Drone(object):
 			while abs(target_heading-self.get_heading())>2 and not watcher.IsCancel():
 				time.sleep(.1)
 		if not watcher.IsCancel():
-			# self.forward(distance,velocity)
-			self.forward_no_stop(distance,velocity)
+			self.forward(distance,velocity)
 
 	def fly_position(self,distance,heading=0):
 		currentlocation=self.get_location()		
