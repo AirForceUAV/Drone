@@ -90,13 +90,17 @@ class Ladar(object):
 				self.drone._log("Reached Target Waypoint!")
 				self.drone.stop()
 				return 1	
-			# angle_heading_target=self.drone.angle_heading_target()
-			# decision=strategy.Decision(angle_heading_target)
-			# angle=decision[1]
-			angle=10
+			angle_heading_target=self.drone.angle_heading_target()
+			decision=strategy.Decision(angle_heading_target)
+			angle=decision[1]
+
+			# distance=decision[0]
+			# self.drone.fly(distance,angle)
+
 			self.fly(angle)
 			time.sleep(defer)
 		return 0
+
 	def go_test(self):
 		target=self.drone.get_target()
 		if target is None:
@@ -111,10 +115,12 @@ class Ladar(object):
 		angle_heading_target=self.drone.angle_heading_target()
 		decision=strategy.Decision(angle_heading_target)
 		angle=decision[1]
-		# angle=30
+
+		# distance=decision[0]
+		# self.drone.fly(distance,angle)
+
 		self.fly(angle)	
 		return 0
-
 
 	# forward and right Flight
 	def going(self,defer=1):
@@ -133,7 +139,6 @@ class Ladar(object):
 			angle_heading_target=self.drone.angle_heading_target()
 			decision=strategy.Decision(angle_heading_target)
 			angle=decision[1]
-			# angle=30
 			self.fly_away(angle)
 			time.sleep(defer)
 		return 0
@@ -154,6 +159,7 @@ class Ladar(object):
 		angle=decision[1]
 		self.fly_away(angle)	
 		return 0
+		
 	def fly(self,angle,velocity=1):
 		if angle is not 0:
 			self.drone.condition_yaw(angle)
@@ -217,10 +223,11 @@ if __name__=="__main__":
 
 		_log('Connecting to Azure by mqtt ...')
 		mqtt=init_mqtt(ip,port)
+		# _log('Connecting to Azure by mqtt_public ...')
+		# mqtt_public=init_mqtt("test.mosquitto.org",8080)
 		drone.set_mqtt(mqtt)
 		while True:
-			mqtt.publish('CopterStatus',drone.CopterStatus())
-			mqtt.publish('FlightLog',drone.FlightLog())		
+			mqtt.publish('FlightLog',drone.FlightLog())	
 			time.sleep(1)
 	else:
 		_log('Disconnect to Azure!')

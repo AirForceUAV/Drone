@@ -50,7 +50,7 @@ class RawIMU(object):
 		"""
 		return "RAW_IMU: time_boot_us={},xacc={},yacc={},zacc={},xgyro={},ygyro={},zgyro={},xmag={},ymag={},zmag={}".format(self.time_boot_us, self.xacc, self.yacc,self.zacc,self.xgyro,self.ygyro,self.zgyro,self.xmag,self.ymag,self.zmag)
 	def display(self):
-		return "{0},{1},{2}".format(self.xacc,self.yacc,self.zacc)
+		return "{0},{1},{2},{3},{4},{5},{6},{7},{8}".format(self.xacc,self.yacc,self.zacc,self.xgyro,self.ygyro,self.zgyro,self.xmag,self.ymag,self.zmag)
 class Servo_Output(object):
 	def __init__(self,servo1=None,servo2=None,servo3=None,servo4=None,servo5=None,servo6=None,servo7=None,servo8=None): 
 		self.servo1=servo1
@@ -65,6 +65,8 @@ class Servo_Output(object):
 		return "SERVO_INPUT:servo1={},servo2={},servo3={},servo4={},servo5={},servo6={},servo7={},servo8={}".format(self.servo1,self.servo2,self.servo3,self.servo4,self.servo5,self.servo6,self.servo7,self.servo8)
 	def display(self):
 		return "{0},{1},{2},{3},{4},{5},{6},{7}".format(self.servo1,self.servo2,self.servo3,self.servo4,self.servo5,self.servo6,self.servo7,self.servo8)
+# class Pressure(object):
+
 class MyVehicle(Vehicle):
 	def __init__(self, *args):
 		super(MyVehicle, self).__init__(*args)
