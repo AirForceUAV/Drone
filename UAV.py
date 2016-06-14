@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import time,threadpool
+import time,threadpool,math
 from AirForce import Drone,CancelWatcher
+from pymavlink import mavutil
 # import sys,os
 # home=os.path.expanduser('~')
 # path=home+"/ObstacleAvoidance"
@@ -13,7 +14,7 @@ __BeginningDate__='2016/5/1'
 __EndingDate__='2016/6/9'
 
 mqttPool = threadpool.ThreadPool(1)
-eventPool=threadpool.ThreadPool(1)
+# eventPool=threadpool.ThreadPool(1)
 
 def _log(message):
 	print ">>> "+message
@@ -44,7 +45,6 @@ def init_mqtt(ip,port=1883):
 	import paho.mqtt.client as mqtt	
 	client = mqtt.Client(client_id='companion',clean_session=True,userdata=None)
 	client.reinitialise(client_id='companion',clean_session=True, userdata=None)
-	drone.set_mqtt(client)
 	client.on_connect = on_connect
 	client.on_message = on_message
 	client.connect(ip, 1883)
@@ -75,46 +75,111 @@ def SendEventStream(sbs):
 class Ladar(object):
 	def __init__(self,drone):
 		self.drone=drone
-
-	def go(self):
+	
+	# Turn yaw ,then forward Flight
+	def go(self,defer=1):
 		watcher=CancelWatcher()
 		target=self.drone.get_target()
 		if target is None:
 			self.drone._log("Target is None!Please drone.set_target(lat,lon) or drone.set_target_metres(dNorth,dEast).")
 			return 0	
-		while not watcher.IsCancel():
-			distance2=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)			
-			if distance2<3:
-				self.drone._log("Reached Target Waypoint!")
-				return 1	
-			angle_heading_target=self.drone.angle_heading_target()
-			decision=strategy.Decision(angle_heading_target)
-			distance1=decision[0]
-			angle=decision[1]	
-			distance=min(distance1,distance2)				
-			self.drone.fly(distance,angle)
-		return 0
-		
 
+		while not watcher.IsCancel():
+			distance=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)			
+			if distance<3:
+				self.drone._log("Reached Target Waypoint!")
+				self.drone.stop()
+				return 1	
+			# angle_heading_target=self.drone.angle_heading_target()
+			# decision=strategy.Decision(angle_heading_target)
+			# angle=decision[1]
+			angle=10
+			self.fly(angle)
+			time.sleep(defer)
+		return 0
 	def go_test(self):
 		target=self.drone.get_target()
 		if target is None:
-			self._log("Target is None!Please set_target(lat,lon)")
+			self.drone._log("Target is None!Please set_target(lat,lon) or drone.set_target_metres(dNorth,dEast).")
 			return 0			
-		distance2=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)
 		
-		if distance2<3:
+		distance=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)			
+		if distance<3:
 			self.drone._log("Reached Target Waypoint!")
-			return 1		
-		# self.drone.show2()
+			self.drone.stop()
+			return 1	
 		angle_heading_target=self.drone.angle_heading_target()
 		decision=strategy.Decision(angle_heading_target)
-		distance1=decision[0]
-		angle=decision[1]	
-		distance=min(distance1,distance2)
-		self.drone.fly(distance,angle)	
+		angle=decision[1]
+		# angle=30
+		self.fly(angle)	
 		return 0
 
+
+	# forward and right Flight
+	def going(self,defer=1):
+		watcher=CancelWatcher()
+		target=self.drone.get_target()
+		if target is None:
+			self.drone._log("Target is None!Please drone.set_target(lat,lon) or drone.set_target_metres(dNorth,dEast).")
+			return 0	
+
+		while not watcher.IsCancel():
+			distance=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)			
+			if distance<3:
+				self.drone._log("Reached Target Waypoint!")
+				self.drone.stop()
+				return 1	
+			angle_heading_target=self.drone.angle_heading_target()
+			decision=strategy.Decision(angle_heading_target)
+			angle=decision[1]
+			# angle=30
+			self.fly_away(angle)
+			time.sleep(defer)
+		return 0
+
+	def going_test(self):
+		target=self.drone.get_target()
+		if target is None:
+			self.drone._log("Target is None!Please set_target(lat,lon) or drone.set_target_metres(dNorth,dEast).")
+			return 0			
+		
+		distance=round(self.drone.get_distance_metres(self.drone.get_location(),target),2)			
+		if distance<3:
+			self.drone._log("Reached Target Waypoint!")
+			self.drone.stop()
+			return 1	
+		angle_heading_target=self.drone.angle_heading_target()
+		decision=strategy.Decision(angle_heading_target)
+		angle=decision[1]
+		self.fly_away(angle)	
+		return 0
+	def fly(self,angle,velocity=1):
+		if angle is not 0:
+			self.drone.condition_yaw(angle)
+		self.send_velocity(velocity,0,0)
+
+	def fly_away(self,angle,velocity=1):
+		results=self.parseAngle(angle)
+		forward=round(results[1]*velocity,2)
+		right=round(results[0]*velocity,2)
+		self.send_velocity(forward,right,0)
+
+	def send_velocity(self,forward,right,down):
+		vehicle=self.drone.get_vehicle()
+		msg=vehicle.message_factory.set_position_target_local_ned_encode(
+		0,0,0,mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED,
+		0b0000111111000111,
+		0,0,0,
+		forward,right,down,    #vx,vy,vz
+		0,0,0,   #afx,afy,afz
+		0,0)    #yaw yaw_rate
+		self.drone._log("Forward:{0}m/s;Right:{1}m/s;Down:{2}".format(forward,right,down))
+		vehicle.send_mavlink(msg)
+
+	def parseAngle(self,angle):	
+		rad=float(angle)/180*math.pi
+		return [math.sin(rad),math.cos(rad)]
 
 if __name__=="__main__":
 	import argparse  
@@ -134,6 +199,7 @@ if __name__=="__main__":
 
 		
 	drone=Drone(connection_string)
+	# ladar=Ladar(drone)
 	if ladar==1:
 		from strategy import strategy
 		_log("Connecting to Ladar ...")
@@ -142,24 +208,24 @@ if __name__=="__main__":
 		_log('Disconnect to Ladar!')
 
 	if cloud==1:
-		_log('Connecting to Azure by sbs...')
-		sbs=init_sbs()
-		drone.set_sbs(sbs)
-		requests = threadpool.makeRequests(SendEventStream_wrapper,(sbs,))
-		[eventPool.putRequest(req) for req in requests]
+		# _log('Connecting to Azure by sbs...')
+		# sbs=init_sbs()
+		# drone.set_sbs(sbs)
+		# requests = threadpool.makeRequests(SendEventStream_wrapper,(sbs,))
+		# [eventPool.putRequest(req) for req in requests]
 		# eventPool.wait()
 
 		_log('Connecting to Azure by mqtt ...')
 		mqtt=init_mqtt(ip,port)
 		drone.set_mqtt(mqtt)
 		while True:
-			mqtt.publish('CopterStatus',drone.CopterStatus())		
+			mqtt.publish('CopterStatus',drone.CopterStatus())
+			mqtt.publish('FlightLog',drone.FlightLog())		
 			time.sleep(1)
 	else:
 		_log('Disconnect to Azure!')
 
 	
-# 
 	# drone.arm()
 	# drone.takeoff(1)
 	# drone.set_channel(3,1300)
@@ -170,9 +236,9 @@ if __name__=="__main__":
 	# 	if ladar.go_test()==1:
 	# 		break
 
-	# drone.close()
+	drone.close()
 
-	# print("Completed")
+	print("Completed")
 	
  
 			

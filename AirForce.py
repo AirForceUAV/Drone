@@ -397,7 +397,7 @@ class Drone(object):
 				else:
 					break
 			self.stop()
-		
+   
 	def send_body_offset_ned_position(self,forward=0,right=0,down=0):
 		msg=self.vehicle.message_factory.set_position_target_local_ned_encode(
 		0,0,0,mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED,
@@ -428,7 +428,6 @@ class Drone(object):
 		duration=distance/velocity
 
 		self.send_body_offset_ned_velocity(velocity,0,0,duration)
-		self.stop()
 
 	def backward(self,distance=1.0,velocity=1.0):
 		self._log("Backward to {0}m,velocity is {1}m/s".format(distance,velocity))
@@ -630,10 +629,7 @@ class Drone(object):
 		return "{0},{1},{2}".format(v[0],v[1],v[2])
 	def GPS_info(self):
 		return str(self.vehicle.gps_0.satellites_visible)
-	def Battery_info(self):
-		return str(self.vehicle.battery.level)
-	def Heading_info(self):
-		return str(self.vehicle.heading)
+	
 	def Distance_from_home(self):
 		if self.get_home() is not None:
 			distance=self.get_distance_metres(self.get_home(),self.get_location())
@@ -652,11 +648,11 @@ class Drone(object):
 	
 	def CopterStatus(self):
 		status={}
-		status["Battery"]=self.Battery_info()
+		status["Battery"]=self.vehicle.battery.level
 		status["GPS"]=self.GPS_info()
 		status["Attitude"]=self.Attitude_info()
 		status["LocationGlobal"]=self.LocationGlobal_info()		
-		status["Heading"]=self.Heading_info()
+		status["Heading"]=self.vehicle.heading
 		status["Velocity"]=self.Velocity_info()		
 		status["DistanceFromHome"]=self.Distance_from_home()
 		status["DistanceToTarget"]=self.Distance_to_target()
@@ -668,6 +664,7 @@ class Drone(object):
 		c=vehicle.capabilities
 		version=self.version()
 		firmware={}
+		firmware["id"]=time.time()
 		firmware['Version']=version
 		firmware['Capabilities']="{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}".format(c.mission_float,c.param_float,c.mission_int,c.command_int,c.param_union,c.ftp,c.set_attitude_target,\
 			 c.set_attitude_target_local_ned,c.set_altitude_target_global_int,c.terrain,c.set_actuator_target,c.flight_termination,c.compass_calibration)
@@ -680,26 +677,27 @@ class Drone(object):
 		gps=self.vehicle.gps_0
 		gimbal=self.vehicle.gimbal
 		battery=self.vehicle.battery
-		status["id"]=time.time()
+		status["id"]=str(time.time())
 		status["Battery"]="{0},{1},{2}".format(battery.voltage,battery.current,battery.level)
 		status["GPS"]="{0},{1},{2},{3}".format(gps.eph,gps.epv,gps.fix_type,gps.satellites_visible)
 		status["Attitude"]=self.Attitude_info()
 		status["LocationGlobal"]=self.LocationGlobal_info()	
 		status["LocationLocal"]=self.LocationLocal()
 		status["LastHeart"]=self.vehicle.last_heartbeat
-		status["Heading"]=self.Heading_info()
+		status["Heading"]=self.vehicle.heading
 		status["Velocity"]=self.Velocity_info()		
 		status["Gimbal"]="{0},{1},{2}".format(gimbal.pitch,gimbal.yaw,gimbal.roll)
 		status["EKF"]="{0}".format(self.vehicle.ekf_ok)
 		status["Rangefinder"]="{0},{1}".format(self.vehicle.rangefinder.distance,self.vehicle.rangefinder.voltage)
-		status["Groundspeed"]=str(self.vehicle.groundspeed)
-		status["Airspeed"]=str(self.vehicle.airspeed)
+		status["Groundspeed"]=self.vehicle.groundspeed
+		status["Airspeed"]=self.vehicle.airspeed
 		status["SystemStatus"]=self.vehicle.system_status.state
 		status["Mode"]=self.vehicle.mode.name
 		status["DistanceFromHome"]=self.Distance_from_home()
 		status["DistanceToTarget"]=self.Distance_to_target()
 		status["IMU"]=self.vehicle.raw_imu.display()
 		status["ServoOutput"]=self.vehicle.servo_output.display()	
+		status["TimeStamp"]=int(time.time())
 		channels=[]
 		for i in range(1,9):
 			channels.append(str(self.vehicle.channels[str(i)]))
@@ -736,19 +734,21 @@ class Drone(object):
 		helper="Please read README.md"
 		return  helper
 	def _log(self, message):
-		if self.sbs == None:
-			print "[DEBUG]:"+message
-		else:
-			if self.pool is None:
-				self.pool=threadpool.ThreadPool(1)
-			else:
-				print "[DEBUG]:"+message
-				log={}
-				log["Navigation"]=message
-				log["TimeStamp"]=time.time()
-				msg=json.dumps(log)
-				requests = threadpool.makeRequests(self.SendStream_wrapper,(msg,))
-				[self.pool.putRequest(req) for req in requests]
+		# if self.sbs == None:
+		# 	print "[DEBUG]:"+message
+		# else:
+		# 	if self.pool is None:
+		# 		self.pool=threadpool.ThreadPool(1)
+		# 	else:
+		# 		print "[DEBUG]:"+message
+		# 		log={}
+		# 		log["Navigation"]=message
+		# 		log["id"]=time.time()
+		# 		log["TimeStamp"]=time.time()
+		# 		msg=json.dumps(log)
+		# 		requests = threadpool.makeRequests(self.SendStream_wrapper,(msg,))
+		# 		[self.pool.putRequest(req) for req in requests]
+		print "[DEBUG]:"+message
 
 if __name__=="__main__":
 	drone=Drone()
