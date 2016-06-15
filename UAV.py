@@ -193,7 +193,7 @@ if __name__=="__main__":
 	parser.add_argument('--connect', help="vehicle connection target string. 'sitl':sitl;0:/dev/ttyACM0;1:/dev/ttyACM1;If not specified or sitl, SITL is automatically started and used.",default='sitl')
 	parser.add_argument('--ladar',help="Wether vehicle connect to ladar or not;If not specified,is automatically used!",default=1)
 	parser.add_argument('--cloud',help='Wether vehicle connect to cloud or not.1/0 is connected/disconnected;If not specified,is automatically Connected!',default=1)
-	parser.add_argument('--ip',help="vehicle connection cloud IP.If not specified,139.217.26.207 is automatically used",default='139.217.26.207')	
+	parser.add_argument('--ip',help="vehicle connection cloud IP",default='101.201.55.168')	
 	parser.add_argument('--port',help="Port Number.Defualt is 1883",default=1883)
 	args = parser.parse_args()
 
