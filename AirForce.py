@@ -385,7 +385,7 @@ class Drone(object):
 					break
 		elif duration==3:
 			self.vehicle.send_mavlink(msg)
-			time.sleep(3)
+			# time.sleep(3)
 		elif duration==0:
 			pass
 		else:
